@@ -248,16 +248,15 @@ function landingView() {
   const dosm = 'https://www.dosm.gov.my/uploads/release-content/file_20260626114308.pdf';
   const oecd = 'https://www.oecd.org/en/publications/oecd-economic-surveys-malaysia-2026_9ab6b826-en/full-report/improving-skills-education-and-training_562c8471.html';
   const tvetLogos = [
-    ['GIATMARA', 'giatmara', 185],
-    ['Politeknik Malaysia', 'politeknik-malaysia', 188],
-    ['Kolej Komuniti', 'kolej-komuniti', 170],
-    ['Institut Kemahiran MARA (IKM)', 'ikm', 196],
-    ['Institut Kemahiran Tinggi Belia Negara (IKTBN)', 'iktbn', 240],
-    ['German-Malaysian Institute (GMI)', 'gmi', 200],
-    ['TalentCorp', 'talentcorp', 168],
-    ['Developer Kaki', 'developer-kaki', 218]
+    ['GIATMARA', 'giatmara', 118],
+    ['Politeknik Malaysia', 'politeknik-malaysia', 203],
+    ['Kolej Komuniti', 'kolej-komuniti', 61, 1.35],
+    ['German-Malaysian Institute (GMI)', 'gmi', 79],
+    ['TalentCorp', 'talentcorp', 221],
+    ['Developer Kaki', 'developer-kaki', 108]
   ];
-  const tvetLogo = ([name, file, width], duplicate) => `<li class="tvet-item"${duplicate ? ' aria-hidden="true"' : ''}><img src="assets/logos/${file}.svg" alt="${duplicate ? '' : escapeHTML(name)}" width="${width}" height="48"></li>`;
+  /* The fourth value is an optical scale: compact stacked lockups need more height to read at marquee size. */
+  const tvetLogo = ([name, file, width, scale = 1], duplicate) => `<li class="tvet-item"${duplicate ? ' aria-hidden="true"' : ''}><img src="assets/logos/${file}.png" alt="${duplicate ? '' : escapeHTML(name)}" width="${width}" height="48"${scale === 1 ? '' : ` style="height:calc(var(--tvet-logo-h) * ${scale})"`}></li>`;
   const tvetItems = tvetLogos.map(logo => tvetLogo(logo, false)).join('') + tvetLogos.map(logo => tvetLogo(logo, true)).join('');
   return `<div class="landing">
     <section class="hero content-width grid items-center">
@@ -269,16 +268,7 @@ function landingView() {
         ${notice('Prototype only. Your uploaded file stays on your device and is never read.', 'lock')}
       </div>
       <figure class="hero-figure">
-        <div class="hero-map"><img src="assets/career-terrain.jpg" alt="" width="1536" height="1024" fetchpriority="high">
-          <svg viewBox="0 0 540 390" preserveAspectRatio="none" role="img" aria-label="A route leading from your current skills to your next move">
-            <path d="M100 294c48 7 90-7 99-40s-7-56 25-70 61 10 90-16 58-29 94-64" fill="none" stroke="#2b1d12" stroke-opacity=".6" stroke-width="6" vector-effect="non-scaling-stroke"/>
-            <path d="M100 294c48 7 90-7 99-40s-7-56 25-70 61 10 90-16 58-29 94-64" fill="none" stroke="#ff913e" stroke-width="2.5" stroke-dasharray="5 5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-            <circle cx="100" cy="294" r="8" fill="#f97316" stroke="#ffedd5" stroke-width="2"/>
-            <circle cx="408" cy="104" r="12" fill="#ffedd5" fill-opacity=".2" stroke="#ffedd5" stroke-opacity=".65"/>
-            <circle cx="408" cy="104" r="5.5" fill="#ff913e" stroke="#ffedd5" stroke-width="1.5"/>
-          </svg>
-          <span class="map-label map-start">You are here</span><span class="map-label map-end">Your next move</span>
-        </div>
+        <div class="hero-map"><img src="assets/hero-technician.webp" alt="A student assembling a robotics kit beside a laptop showing training, campus and career paths" width="1100" height="825" fetchpriority="high"></div>
         <figcaption><span><b>Fig. 1A</b> · The career path</span><span>Malaysia</span></figcaption>
       </figure>
     </section>

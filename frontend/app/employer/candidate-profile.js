@@ -57,7 +57,7 @@ export default function CandidateProfile({ id }) {
 
       <div className="page-heading emp-profile-head">
         <div className="emp-profile-id">
-          <Avatar initials={candidate.initials} size="lg" />
+          <Avatar initials={candidate.initials} photo={candidate.photo} size="lg" />
           <div>
             <p className="eyebrow"><span className="orange-dot" />Candidate for {role.title}</p>
             <h1>{candidate.name}</h1>

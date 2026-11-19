@@ -25,10 +25,16 @@ export function MatchRing({ value }) {
   );
 }
 
-export function Avatar({ initials, size = 'md' }) {
+/* Illustrative headshot from public/assets/personas; initials are the fallback. */
+export function Avatar({ initials, photo, size = 'md' }) {
   return (
-    <span className={`emp-avatar emp-avatar-${size}`} aria-hidden="true">
-      {initials}
+    <span className={`emp-avatar emp-avatar-${size}${photo ? ' emp-avatar-photo-wrap' : ''}`} aria-hidden="true">
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="emp-avatar-photo" src={photo} alt="" width="96" height="96" loading="lazy" decoding="async" />
+      ) : (
+        initials
+      )}
     </span>
   );
 }

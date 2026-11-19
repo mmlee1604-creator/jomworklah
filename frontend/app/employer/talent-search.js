@@ -165,7 +165,7 @@ export default function TalentSearch() {
           {filtered.map(({ candidate, match, openGaps, keySkills }) => (
             <article className="panel emp-card" key={candidate.id}>
               <div className="emp-card-head">
-                <Avatar initials={candidate.initials} />
+                <Avatar initials={candidate.initials} photo={candidate.photo} />
                 <div className="emp-card-id">
                   <h2 className="emp-name">{candidate.name}</h2>
                   <p className="emp-headline">{candidate.headline}</p>

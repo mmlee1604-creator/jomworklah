@@ -566,7 +566,7 @@ dialog:has(> .persona-grid) .modal-description { max-width: 48ch; }
   .map-label { font-size: 8px; padding: 4px 8px; }
   .hero-figure figcaption { padding-top: 9px; font-size: 10px; }
   .mission, .features { scroll-margin-top: 69px; }
-  .tvet-band { padding-block: 22px 20px; }
+  .tvet-band { padding-block: 24px 26px; }
   .tvet-band-title { padding-inline: 8px; font-size: 13px; }
   .tvet-strip { --tvet-gap: 32px; --tvet-fade: 28px; margin-top: 16px; }
   .mission-layout, .job-grid, .dashboard-grid, .skills-grid, .settings-grid, .roadmap-layout { grid-template-columns: minmax(0, 1fr); }

@@ -127,7 +127,7 @@ var SkillsAtlas = (() => {
   }
 
   /* ---- view state (kept across re-mounts) ---- */
-  let mode = "overlay", skill = "all", selected = null, home = null, level = "nation", activeState = null, selDist = null, view = "2d";
+  let mode = "overlay", skill = "all", selected = null, home = null, level = "nation", activeState = null, selDist = null, view = "3d";
   let started = false, mounted = false, root = null, els = {};
   try { const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (stored && ["skills", "industry", "overlay"].includes(stored.mode)) mode = stored.mode; } catch (error) { /* storage can be unavailable on file origins */ }
   function persist() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode })); } catch (error) { /* ignore */ } }
@@ -794,8 +794,8 @@ var SkillsAtlas = (() => {
         <button type="button" class="mode" data-mode="overlay" aria-pressed="true">The gap<small>Demand − supply</small></button>
       </div>
       <div class="atlas-viewtoggle" role="group" aria-label="Map view">
-        <button type="button" class="vt" data-view="2d" aria-pressed="true">Map</button>
-        <button type="button" class="vt" data-view="3d" aria-pressed="false">3D</button>
+        <button type="button" class="vt" data-view="2d" aria-pressed="false">Map</button>
+        <button type="button" class="vt" data-view="3d" aria-pressed="true">3D</button>
       </div>
     </div>
     <div class="atlas-toolbar">
@@ -835,6 +835,25 @@ var SkillsAtlas = (() => {
     els.views?.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
   }
 
+  /* The 3D view is the default, so the engine is fetched on first mount as well
+     as when the 3D toggle is pressed. */
+  async function boot3D() {
+    if (!root || view !== "3d") return;
+    if (!three.renderer) {
+      show3DMessage("Loading the 3D map…");
+      const loaded = await loadThree();
+      if (!root || !root.isConnected) return;
+      if (!loaded) {
+        if (els.reset) els.reset.hidden = true;
+        show3DMessage("The 3D view needs an internet connection to load its map engine. The 2D map works offline.");
+        buildSidebar();
+        return;
+      }
+    }
+    render();
+    if (selected || selDist) flyTo(selDist || selected);
+  }
+
   async function setView(next) {
     if (!root || next === view) return;
     if (next === "2d") { view = "2d"; render(); return; }
@@ -843,17 +862,7 @@ var SkillsAtlas = (() => {
     if (els.reset) els.reset.hidden = false;
     syncControls();
     if (three.renderer) { render(); return; }
-    show3DMessage("Loading the 3D map…");
-    const loaded = await loadThree();
-    if (!root || !root.isConnected) return;
-    if (!loaded) {
-      if (els.reset) els.reset.hidden = true;
-      show3DMessage("The 3D view needs an internet connection to load its map engine. The 2D map works offline.");
-      buildSidebar();
-      return;
-    }
-    render();
-    if (selected || selDist) flyTo(selDist || selected);
+    await boot3D();
   }
 
   function bindControls() {
@@ -909,7 +918,7 @@ var SkillsAtlas = (() => {
     bindControls();
     mounted = true;
     render();
-    if (view === "3d" && (selected || selDist)) flyTo(selDist || selected);
+    if (view === "3d") boot3D();
   }
 
   function destroy() {

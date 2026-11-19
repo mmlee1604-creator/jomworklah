@@ -108,7 +108,7 @@ export const roles = [
    listed and only their detail routes exist. */
 export const candidates = [
   {
-    id: 'aina-rahman', name: 'Aina Rahman', initials: 'AR',
+    id: 'aina-rahman', name: 'Aina Rahman', initials: 'AR', photo: '/assets/personas/aina.jpg',
     headline: 'IT diploma graduate', qualification: 'Diploma', field: 'Information Technology',
     location: 'Selangor', availability: 'Available now',
     interests: ['data', 'technology'], shared: true,
@@ -129,7 +129,7 @@ export const candidates = [
     roadmap: { phase: 2, done: 5, total: 9 }
   },
   {
-    id: 'amir-hakim', name: 'Amir Hakim', initials: 'AH',
+    id: 'amir-hakim', name: 'Amir Hakim', initials: 'AH', photo: '/assets/personas/amir.jpg',
     headline: 'SPM leaver with workshop experience', qualification: 'SPM', field: 'General studies',
     location: 'Perak', availability: 'Available now',
     interests: ['automotive', 'mechanical', 'electronics'], shared: true,
@@ -149,7 +149,7 @@ export const candidates = [
     roadmap: { phase: 1, done: 3, total: 8 }
   },
   {
-    id: 'nurul-izzah', name: 'Nurul Izzah', initials: 'NI',
+    id: 'nurul-izzah', name: 'Nurul Izzah', initials: 'NI', photo: '/assets/personas/nurul-izzah.jpg',
     headline: 'Business administration diploma, operations focus', qualification: 'Diploma', field: 'Business administration',
     location: 'Johor', availability: 'Available now',
     interests: ['business', 'data'], shared: true,
@@ -169,7 +169,7 @@ export const candidates = [
     roadmap: { phase: 3, done: 7, total: 10 }
   },
   {
-    id: 'daniel-tan', name: 'Daniel Tan', initials: 'DT',
+    id: 'daniel-tan', name: 'Daniel Tan', initials: 'DT', photo: '/assets/personas/daniel-tan.jpg',
     headline: 'Computer science degree, frontend projects', qualification: 'Degree', field: 'Computer science',
     location: 'Kuala Lumpur', availability: '1 month notice',
     interests: ['technology', 'creative'], shared: true,
@@ -189,7 +189,7 @@ export const candidates = [
     roadmap: { phase: 2, done: 4, total: 8 }
   },
   {
-    id: 'priya-selvam', name: 'Priya Selvam', initials: 'PS',
+    id: 'priya-selvam', name: 'Priya Selvam', initials: 'PS', photo: '/assets/personas/priya-selvam.jpg',
     headline: 'Statistics diploma, reporting and dashboards', qualification: 'Diploma', field: 'Statistics',
     location: 'Penang', availability: 'Available now',
     interests: ['data', 'business'], shared: true,
@@ -209,7 +209,7 @@ export const candidates = [
     roadmap: { phase: 3, done: 8, total: 10 }
   },
   {
-    id: 'hafiz-rahman', name: 'Hafiz Rahman', initials: 'HR',
+    id: 'hafiz-rahman', name: 'Hafiz Rahman', initials: 'HR', photo: '/assets/personas/hafiz-rahman.jpg',
     headline: 'SPM leaver, two years of workshop support', qualification: 'SPM', field: 'Automotive',
     location: 'Perak', availability: 'Available now',
     interests: ['automotive', 'mechanical'], shared: true,
@@ -229,7 +229,7 @@ export const candidates = [
     roadmap: { phase: 2, done: 6, total: 9 }
   },
   {
-    id: 'mei-ling-chong', name: 'Mei Ling Chong', initials: 'MC',
+    id: 'mei-ling-chong', name: 'Mei Ling Chong', initials: 'MC', photo: '/assets/personas/mei-ling-chong.jpg',
     headline: 'Marketing degree, campaign and content work', qualification: 'Degree', field: 'Marketing',
     location: 'Selangor', availability: 'Available now',
     interests: ['creative', 'business'], shared: true,
@@ -249,7 +249,7 @@ export const candidates = [
     roadmap: { phase: 1, done: 2, total: 8 }
   },
   {
-    id: 'arun-kumar', name: 'Arun Kumar', initials: 'AK',
+    id: 'arun-kumar', name: 'Arun Kumar', initials: 'AK', photo: '/assets/personas/arun-kumar.jpg',
     headline: 'IT support certificate, helpdesk practice', qualification: 'Certificate', field: 'IT support',
     location: 'Kuala Lumpur', availability: 'Available now',
     interests: ['technology', 'electronics'], shared: true,
@@ -269,7 +269,7 @@ export const candidates = [
     roadmap: { phase: 2, done: 5, total: 8 }
   },
   {
-    id: 'siti-nabilah', name: 'Siti Nabilah', initials: 'SN',
+    id: 'siti-nabilah', name: 'Siti Nabilah', initials: 'SN', photo: '/assets/personas/siti-nabilah.jpg',
     headline: 'Operations diploma, scheduling and reporting', qualification: 'Diploma', field: 'Operations management',
     location: 'Johor', availability: '2 months notice',
     interests: ['business', 'data'], shared: true,
@@ -289,7 +289,7 @@ export const candidates = [
     roadmap: { phase: 3, done: 6, total: 9 }
   },
   {
-    id: 'jason-lee', name: 'Jason Lee', initials: 'JL',
+    id: 'jason-lee', name: 'Jason Lee', initials: 'JL', photo: '/assets/personas/jason-lee.jpg',
     headline: 'Web development diploma, self-taught JavaScript', qualification: 'Diploma', field: 'Web development',
     location: 'Remote', availability: 'Available now',
     interests: ['technology', 'creative'], shared: true,
@@ -309,7 +309,7 @@ export const candidates = [
     roadmap: { phase: 1, done: 2, total: 7 }
   },
   {
-    id: 'farah-adila', name: 'Farah Adila', initials: 'FA',
+    id: 'farah-adila', name: 'Farah Adila', initials: 'FA', photo: '/assets/personas/farah-adila.jpg',
     headline: 'Data analytics degree, dashboard portfolio', qualification: 'Degree', field: 'Data analytics',
     location: 'Selangor', availability: 'Available now',
     interests: ['data', 'technology'], shared: false,
@@ -328,7 +328,7 @@ export const candidates = [
     roadmap: { phase: 4, done: 10, total: 10 }
   },
   {
-    id: 'kumaravel-murugan', name: 'Kumaravel Murugan', initials: 'KM',
+    id: 'kumaravel-murugan', name: 'Kumaravel Murugan', initials: 'KM', photo: '/assets/personas/kumaravel-murugan.jpg',
     headline: 'SPM leaver, industrial maintenance training', qualification: 'SPM', field: 'General studies',
     location: 'Penang', availability: 'Available now',
     interests: ['mechanical', 'electronics'], shared: false,
