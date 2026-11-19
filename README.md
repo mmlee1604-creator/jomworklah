@@ -79,41 +79,54 @@ the hours they actually have each week.
 
 ## 2. Screenshots
 
-> [!NOTE]
-> **This section is reserved.** Drop captures into [`docs/screenshots/`](docs/screenshots/) using the
-> filenames below, then uncomment the matching lines.
+Captured in build order, oldest first. All nine are the Aina Rahman demo persona with
+**Operations Coordinator** set as the target career, so the fit and gap figures below are hers —
+not the Junior Data Analyst numbers used in the [walkthrough](#11-demo-walkthrough).
 
-<!--
-| Overview dashboard | Skills radar |
-|---|---|
-| ![](docs/screenshots/01-overview.png) | ![](docs/screenshots/02-skills-radar.png) |
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/01-skills-atlas.png" alt="Skills Atlas: training supply choropleth of Malaysia by state" /></td>
+    <td width="50%"><img src="docs/screenshots/02-overview.png" alt="Overview dashboard with stat cards, skills bars and best career match" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>1 · Skills Atlas</b><br/><sub>Training supply, hiring demand and the gap between them, state by state. Aina's Selangor is outlined in orange; the cluster selector and the Map/3D toggle sit above the choropleth.</sub></td>
+    <td align="center"><b>2 · Overview</b><br/><sub>Where the app lands after parsing: 10 evidenced skills, 8 career paths, an 83% top match, and a roadmap at 0 of 11 tasks.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/03-landing.png" alt="Landing hero: Your skills have a future. Jom find it." /></td>
+    <td width="50%"><img src="docs/screenshots/04-demo-profile.png" alt="Review your demo profile form" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>3 · Landing</b><br/><sub><em>Analyse My Resume</em> starts the upload; <em>Try with Demo Profile</em> loads a persona. The lock note is literal — the file never leaves the device.</sub></td>
+    <td align="center"><b>4 · Profile review</b><br/><sub>The parsed profile, shown before it drives anything. Every field is editable, so you can change an input and watch the outputs move.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/05-skills-radar.png" alt="My Skills: 18-axis evidence radar chart with skill inspector" /></td>
+    <td width="50%"><img src="docs/screenshots/06-careers.png" alt="Explore Careers: ranked career cards with fit rings" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>5 · My Skills</b><br/><sub>The 18-axis radar is hand-built inline SVG, no charting library. Picking an axis grades the claim: Excel at 4/5 reads as <em>demonstrated in substantial work</em>.</sub></td>
+    <td align="center"><b>6 · Explore Careers</b><br/><sub>All eight paths ranked by fit, the target badged, top matches marked, and a plain-language <em>Why this matches you</em> under each card.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/07-skill-gap.png" alt="Skill Gap: current evidence versus target requirement bars" /></td>
+    <td width="50%"><img src="docs/screenshots/08-roadmap.png" alt="My Roadmap: four phases with tasks and progress" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>7 · Skill Gap</b><br/><sub>Current evidence against each target level, bar by bar. Operations Coordinator needs one more point on four skills, so this persona has no priority gaps to chase.</sub></td>
+    <td align="center"><b>8 · My Roadmap</b><br/><sub>Four phases compressed to 5 hours a week, 11 tasks, an optional start date, and a <em>Next best action</em> that follows whatever is still open.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/09-profile.png" alt="My Profile: profile details, career preferences and demo settings" /></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><b>9 · My Profile</b><br/><sub>Interests, budget, weekly hours and learning mode live here, next to the controls that reset the journey. This is where the personalisation demo happens.</sub></td>
+  </tr>
+</table>
 
-| Explore careers | Skills gap |
-|---|---|
-| ![](docs/screenshots/03-careers.png) | ![](docs/screenshots/04-skill-gap.png) |
-
-| Upskilling hub | Roadmap |
-|---|---|
-| ![](docs/screenshots/05-upskilling.png) | ![](docs/screenshots/06-roadmap.png) |
-
-| Skills Atlas (2D) | Skills Atlas (3D) | Employer talent search |
-|---|---|---|
-| ![](docs/screenshots/07-atlas-2d.png) | ![](docs/screenshots/08-atlas-3d.png) | ![](docs/screenshots/09-employer.png) |
--->
-
-Suggested capture states, each reachable from a fresh demo session:
-
-| # | File to add | Screen | What it should show |
-|---|---|---|---|
-| 1 | `01-overview.png` | `#/dashboard` | "Hi Aina, here is your career overview" with the four summary panels |
-| 2 | `02-skills-radar.png` | `#/skills` | The 18-axis evidence radar with a hovered skill tooltip |
-| 3 | `03-careers.png` | `#/careers` | Ranked careers with fit rings and the **Top match** chips |
-| 4 | `04-skill-gap.png` | `#/gap` | Current-vs-target paired bars for Junior Data Analyst |
-| 5 | `05-upskilling.png` | `#/upskilling` | "Suggested for your gaps" pathways with provider links |
-| 6 | `06-roadmap.png` | `#/roadmap` | Four phases, week ranges and ticked task progress |
-| 7 | `07-atlas-2d.png` | `#/atlas` | State choropleth with a district drilled open |
-| 8 | `08-atlas-3d.png` | `#/atlas` | 3D extruded columns over the same data |
-| 9 | `09-employer.png` | `/employer` | Talent search results with match rings and gap chips |
+> [!TIP]
+> Two screens still need captures: the **Upskilling Hub** (`#/upskilling`) and the **employer talent
+> search** (`/employer`). Add them as `10-upskilling.png` and `11-employer.png` and extend the table.
 
 ---
 
@@ -208,7 +221,7 @@ QodeFest/
 │   ├── src/routes/        thin HTTP layer
 │   └── test/              46 tests, including prototype-parity assertions
 ├── slide deck/        the pitch deck (jom-kerja-lah.html)
-└── docs/screenshots/  reserved for the screenshot section above
+└── docs/screenshots/  the nine captures in section 2
 ```
 
 ```mermaid
