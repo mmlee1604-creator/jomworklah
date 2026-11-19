@@ -8,6 +8,8 @@
 
 *Reimagine Malaysia* · Hackathon build
 
+**Live demo:** <https://fleet-mistral-h3k2xg0.tmp.now/candidate>
+
 [![Frontend](https://img.shields.io/badge/frontend-Next.js%2016%20·%20React%2019-e65536?style=flat-square)](frontend/)
 [![Backend](https://img.shields.io/badge/backend-Node%2024%20·%20Express%205%20·%20SQLite-087a63?style=flat-square)](backend/)
 [![Tests](https://img.shields.io/badge/tests-46%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
