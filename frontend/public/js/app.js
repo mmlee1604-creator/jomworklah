@@ -45,6 +45,12 @@ const byId = id => document.getElementById(id);
 const skillIndex = Object.fromEntries(skills.map(skill => [skill.id, skill]));
 const courseIndex = Object.fromEntries(courses.map(course => [course.id, course]));
 const jobIndex = Object.fromEntries(jobs.map(job => [job.id, job]));
+const employerNames = {
+  petronas: 'PETRONAS', maybank: 'Maybank', grab: 'Grab', cimb: 'CIMB', touchngo: 'Touch ’n Go', shopee: 'Shopee',
+  tm: 'TM', celcomdigi: 'CelcomDigi', maxis: 'Maxis', lazada: 'Lazada', astro: 'Astro', dhl: 'DHL',
+  posmalaysia: 'Pos Malaysia', simedarby: 'Sime Darby', perodua: 'Perodua', proton: 'Proton', toyota: 'Toyota',
+  topglove: 'Top Glove', infineon: 'Infineon', daikin: 'Daikin'
+};
 const main = byId('main');
 const modal = byId('modal');
 
@@ -582,6 +588,12 @@ function skillsView() {
     </div>`;
 }
 
+function employerLogos(job) {
+  const ids = job.employers || [];
+  if (!ids.length) return '';
+  return `<div class="hiring"><h3 class="hiring-title">Example employers hiring TVET talent</h3><ul class="employer-logos">${ids.map(id => `<li class="employer-logo"><img src="assets/logos/employers/${id}.svg" alt="${employerNames[id]}" loading="lazy" decoding="async"></li>`).join('')}</ul></div>`;
+}
+
 function jobCard(job, featured) {
   const gaps = gapsFor(job);
   const strengths = gaps.filter(item => !item.gap).map(item => skillName(item.skillId));
@@ -596,6 +608,7 @@ function jobCard(job, featured) {
     <div class="card-details"><div><strong>Matching skills</strong><div class="chips">${matched.length ? matched.map(item => chip(item)).join('') : '<span>None in the sample profile</span>'}</div></div>
     <div><strong>Primary gaps</strong><div class="chips">${priority.length ? priority.map(item => chip(item, true)).join('') : chip('Sample requirements covered')}</div></div>
     <div><strong>Why this matches you</strong><p>${reason}${interest ? ' It also aligns with your interests.' : ''}</p></div></div>
+    ${employerLogos(job)}
     <div class="button-row">${button('Explore Role', 'role', { style: 'secondary', value: job.id })}${selected ? goButton('View Skill Gap', 'gap') : button('Choose as Target', 'target', { value: job.id, mark: 'arrow' })}</div>
   </article>`;
 }
@@ -617,7 +630,7 @@ function careersView() {
       ${selectField('career-category', 'Industry', categories.map(item => [item, item === 'All' ? 'All industries' : item]), state.careerCategory)}
       ${selectField('career-sort', 'Sort by', [['match', 'Match score'], ['name', 'Name (A–Z)']], state.careerSort)}
     </div>
-    <div class="result-line"><span id="career-count" class="label" aria-live="polite"></span><span>Profile compatibility (demo) uses skills and interests.</span></div>
+    <div class="result-line"><span id="career-count" class="label" aria-live="polite"></span><span>Profile compatibility (demo) uses skills and interests. Employer examples are illustrative.</span></div>
     <div class="job-grid" id="career-results"></div>`;
 }
 
@@ -629,6 +642,8 @@ function roleDetails(id) {
     <h3>Sample skill requirements</h3><div class="mini-requirements">${job.requirements.map(item => `<div><span>${skillName(item.skillId)}</span><strong>${item.level} / 5</strong></div>`).join('')}</div>
     <h3>Typical qualifications</h3><p>${job.qualification}</p>
     <h3>Example progression</h3><p>${job.progression.join(' → ')}</p>
+    ${employerLogos(job)}
+    ${notice('Employer logos are simplified examples, not endorsements.')}
   </div><div class="modal-actions">${button('Close', 'close', { style: 'secondary' })}${targetJob()?.id === id ? goButton('View Skill Gap', 'gap') : button('Choose as Target', 'target', { value: id, mark: 'arrow' })}</div>`);
 }
 

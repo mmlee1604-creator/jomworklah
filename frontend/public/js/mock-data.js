@@ -84,6 +84,7 @@ const personas = {
   }
 };
 
+// Employer names are illustrative examples of Malaysian employers that recruit TVET talent, not endorsements.
 const jobs = [
   {
     id: 'junior-data-analyst', title: 'Junior Data Analyst', category: 'Technology', sector: 'Technology & Data', icon: 'chart',
@@ -92,7 +93,7 @@ const jobs = [
     qualification: 'A relevant diploma, degree or demonstrated equivalent skills. Employers set their own criteria.',
     progression: ['Junior Data Analyst', 'Data Analyst', 'Analytics Lead'],
     requirements: [['excel',4,.20], ['sql',4,.30], ['python',3,.15], ['data-viz',4,.25], ['communication',3,.10]],
-    tags: ['data', 'technology'], project: ['Analyse a public Malaysian dataset and build a one-page dashboard.', 'Write a short analysis explaining three findings and one limitation.']
+    tags: ['data', 'technology'], employers: ['petronas', 'maybank', 'grab'], project: ['Analyse a public Malaysian dataset and build a one-page dashboard.', 'Write a short analysis explaining three findings and one limitation.']
   },
   {
     id: 'business-intelligence-analyst', title: 'Business Intelligence Analyst', category: 'Technology', sector: 'Technology & Data', icon: 'chart',
@@ -101,7 +102,7 @@ const jobs = [
     qualification: 'Relevant analytics or business studies and a portfolio of reporting work are typical examples.',
     progression: ['BI Associate', 'BI Analyst', 'BI Lead'],
     requirements: [['sql',4,.30], ['data-viz',5,.25], ['reporting',4,.20], ['excel',4,.15], ['communication',4,.10]],
-    tags: ['data', 'business'], project: ['Build an operations dashboard from a fictional sales dataset.', 'Document how each metric is calculated and checked.']
+    tags: ['data', 'business'], employers: ['cimb', 'touchngo', 'shopee'], project: ['Build an operations dashboard from a fictional sales dataset.', 'Document how each metric is calculated and checked.']
   },
   {
     id: 'frontend-web-developer', title: 'Frontend Web Developer', category: 'Technology', sector: 'Web & Software', icon: 'code',
@@ -110,7 +111,7 @@ const jobs = [
     qualification: 'A relevant qualification or a demonstrable web portfolio is a typical starting point.',
     progression: ['Junior Frontend Developer', 'Frontend Developer', 'UI Engineer'],
     requirements: [['web',4,.35], ['javascript',4,.25], ['troubleshoot',3,.15], ['teamwork',3,.15], ['communication',3,.10]],
-    tags: ['technology', 'creative'], project: ['Build a responsive portfolio with an accessible form.', 'Test it with a keyboard and on a narrow screen, then record your fixes.']
+    tags: ['technology', 'creative'], employers: ['grab', 'shopee', 'touchngo'], project: ['Build a responsive portfolio with an accessible form.', 'Test it with a keyboard and on a narrow screen, then record your fixes.']
   },
   {
     id: 'it-support-technician', title: 'IT Support Technician', category: 'Technology', sector: 'IT Services', icon: 'monitor',
@@ -119,7 +120,7 @@ const jobs = [
     qualification: 'A relevant certificate or diploma and practical troubleshooting examples can support an application.',
     progression: ['IT Support Technician', 'Support Specialist', 'Systems Administrator'],
     requirements: [['troubleshoot',4,.30], ['networking',3,.15], ['communication',4,.25], ['teamwork',3,.20], ['electrical',2,.10]],
-    tags: ['technology', 'electronics'], project: ['Create a troubleshooting knowledge base for three common support tickets.', 'Include reproducible checks, outcomes and escalation notes.']
+    tags: ['technology', 'electronics'], employers: ['tm', 'celcomdigi', 'maxis'], project: ['Create a troubleshooting knowledge base for three common support tickets.', 'Include reproducible checks, outcomes and escalation notes.']
   },
   {
     id: 'digital-marketing-executive', title: 'Digital Marketing Executive', category: 'Creative', sector: 'Marketing & Media', icon: 'spark',
@@ -128,7 +129,7 @@ const jobs = [
     qualification: 'A communications or business qualification, or sample campaigns showing practical skills.',
     progression: ['Digital Marketing Assistant', 'Digital Marketing Executive', 'Campaign Lead'],
     requirements: [['marketing',4,.35], ['content',4,.20], ['reporting',3,.15], ['excel',3,.15], ['communication',3,.15]],
-    tags: ['creative', 'business'], project: ['Draft a two-week sample campaign for a fictional local business.', 'Analyse the example campaign results and explain what you would change.']
+    tags: ['creative', 'business'], employers: ['shopee', 'lazada', 'astro'], project: ['Draft a two-week sample campaign for a fictional local business.', 'Analyse the example campaign results and explain what you would change.']
   },
   {
     id: 'operations-coordinator', title: 'Operations Coordinator', category: 'Business', sector: 'Business Operations', icon: 'briefcase',
@@ -137,7 +138,7 @@ const jobs = [
     qualification: 'Business or administrative studies and examples of organised project work can be relevant.',
     progression: ['Operations Assistant', 'Operations Coordinator', 'Operations Lead'],
     requirements: [['excel',5,.25], ['reporting',4,.25], ['teamwork',4,.20], ['communication',4,.20], ['troubleshoot',3,.10]],
-    tags: ['business', 'data'], project: ['Build a stock or service tracker for a fictional small business.', 'Summarise late handoffs and propose a change to the process.']
+    tags: ['business', 'data'], employers: ['dhl', 'posmalaysia', 'simedarby'], project: ['Build a stock or service tracker for a fictional small business.', 'Summarise late handoffs and propose a change to the process.']
   },
   {
     id: 'automotive-technician', title: 'Automotive Technician', category: 'Engineering', sector: 'Automotive & TVET', icon: 'wrench',
@@ -146,7 +147,7 @@ const jobs = [
     qualification: 'Employers may require a relevant SKM or equivalent training. Check qualification and supervision requirements for the work.',
     progression: ['Workshop Assistant', 'Automotive Technician', 'Diagnostic Technician'],
     requirements: [['tools',4,.20], ['auto',3,.25], ['safety',4,.20], ['electrical',4,.15], ['troubleshoot',4,.10], ['sensors',3,.10]],
-    tags: ['automotive', 'mechanical', 'electronics'], project: ['With a qualified supervisor, observe a routine diagnostic exercise and record the symptoms and checks.', 'Prepare a service checklist for supervisor review, including hazards and when to stop and escalate.']
+    tags: ['automotive', 'mechanical', 'electronics'], employers: ['perodua', 'proton', 'toyota'], project: ['With a qualified supervisor, observe a routine diagnostic exercise and record the symptoms and checks.', 'Prepare a service checklist for supervisor review, including hazards and when to stop and escalate.']
   },
   {
     id: 'industrial-maintenance-technician', title: 'Industrial Maintenance Technician', category: 'Engineering', sector: 'Manufacturing & TVET', icon: 'wrench',
@@ -155,7 +156,7 @@ const jobs = [
     qualification: 'A relevant SKM or technical diploma may be expected. Confirm the training and authorisation needed for practical work.',
     progression: ['Maintenance Assistant', 'Maintenance Technician', 'Maintenance Supervisor'],
     requirements: [['tools',4,.20], ['safety',5,.25], ['electrical',4,.20], ['sensors',3,.15], ['troubleshoot',4,.15], ['teamwork',3,.05]],
-    tags: ['mechanical', 'electronics'], project: ['Draw a preventive maintenance schedule for sample equipment.', 'With a supervisor, review a simulated inspection log and identify escalation points.']
+    tags: ['mechanical', 'electronics'], employers: ['topglove', 'infineon', 'daikin'], project: ['Draw a preventive maintenance schedule for sample equipment.', 'With a supervisor, review a simulated inspection log and identify escalation points.']
   }
 ].map(job => ({
   ...job,

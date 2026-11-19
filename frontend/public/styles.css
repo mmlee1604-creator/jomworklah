@@ -391,6 +391,12 @@ input[type="checkbox"] { accent-color: var(--orange-ink); width: 17px; height: 1
 .card-details > div > strong { display: block; margin-bottom: 4px; }
 .card-details p, .card-details div > span { color: var(--muted); }
 .job-card .button-row, .course-card .button-row { margin-top: 9px; }
+.hiring { margin-top: 3px; padding-top: 11px; border-top: 1px solid var(--line); }
+.hiring .hiring-title { margin: 0 0 8px; font: 800 10.5px/1.4 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.hiring .employer-logos { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.employer-logo { display: inline-flex; align-items: center; min-height: 30px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.employer-logo img { display: block; width: auto; height: 13px; }
+.hiring + .notice { margin-top: 10px; }
 .empty-state { display: grid; justify-items: start; padding: 25px; gap: 10px; }
 .empty-state > p { font-size: 15px; color: var(--muted); }
 .gap-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 15px; }
