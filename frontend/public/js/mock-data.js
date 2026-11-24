@@ -185,3 +185,24 @@ const courses = [
 ].map(([id, title, provider, skillIds, mode, location, minWeeks, maxWeeks]) => ({
   id, title, provider, skillIds, mode, location, minWeeks, maxWeeks, isIllustrative: true, fee: null
 }));
+
+// Holland Code (RIASEC) career-interest model. Job codes are illustrative three-letter approximations, strongest interest first.
+const hollandTypes = [
+  ['R', 'Realistic', 'Hands-on work with tools, machines and equipment'],
+  ['I', 'Investigative', 'Analysing, researching and solving problems'],
+  ['A', 'Artistic', 'Creating, designing and original ideas'],
+  ['S', 'Social', 'Helping, teaching and working with people'],
+  ['E', 'Enterprising', 'Persuading, leading and driving results'],
+  ['C', 'Conventional', 'Organising data, records and clear procedures']
+].map(([code, name, description]) => ({ code, name, description }));
+
+const jobHolland = {
+  'junior-data-analyst': 'ICR',
+  'business-intelligence-analyst': 'ICE',
+  'frontend-web-developer': 'ICA',
+  'it-support-technician': 'CRI',
+  'digital-marketing-executive': 'ECA',
+  'operations-coordinator': 'ECS',
+  'automotive-technician': 'RCI',
+  'industrial-maintenance-technician': 'RIC'
+};

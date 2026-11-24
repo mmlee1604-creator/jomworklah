@@ -45,6 +45,7 @@ const byId = id => document.getElementById(id);
 const skillIndex = Object.fromEntries(skills.map(skill => [skill.id, skill]));
 const courseIndex = Object.fromEntries(courses.map(course => [course.id, course]));
 const jobIndex = Object.fromEntries(jobs.map(job => [job.id, job]));
+const hollandIndex = Object.fromEntries(hollandTypes.map(type => [type.code, type]));
 const employerNames = {
   petronas: 'PETRONAS', maybank: 'Maybank', grab: 'Grab', cimb: 'CIMB', touchngo: 'Touch ’n Go', shopee: 'Shopee',
   tm: 'TM', celcomdigi: 'CelcomDigi', maxis: 'Maxis', lazada: 'Lazada', astro: 'Astro', dhl: 'DHL',
@@ -133,6 +134,20 @@ function mbtiSummary(type) {
       <p>${group.label} · ${type.tagline}</p>
     </div>
   </div>`;
+}
+
+function hollandBody() {
+  const codes = hollandCodes();
+  const summary = codes.length
+    ? `<strong class="holland-code">${codes.join('')}</strong><span>${codes.map(code => hollandIndex[code].name).join(' · ')}</span>`
+    : '<span>No Holland Code selected yet. Career matches do not use it until you pick at least one letter.</span>';
+  return `<div class="holland-current">${summary}</div>
+    <div class="holland-grid" role="group" aria-label="Choose up to three Holland Code letters, strongest interest first">${hollandTypes.map(type => {
+      const rank = codes.indexOf(type.code) + 1;
+      return `<button type="button" class="holland-option" data-action="holland" data-value="${type.code}" aria-pressed="${rank > 0}"><span class="holland-rank">${rank || ''}</span><strong>${type.code} · ${type.name}</strong><small>${type.description}</small></button>`;
+    }).join('')}</div>
+    <div class="button-row">${button('Clear selection', 'holland-clear', { style: 'secondary' })}</div>
+    <div class="holland-test"><a class="button button-secondary" href="https://www.mynextmove.org/explore/ip" target="_blank" rel="noopener noreferrer">Don't know yours? Take the free interest test${icon('arrow', 17)}</a><p>Opens the O*NET Interest Profiler (free, about 10 minutes, English) in a new tab. It scores all six areas. Come back and pick your three highest, highest first.</p></div>`;
 }
 
 function button(label, action, { style = 'primary', mark = '', value = '', attrs = '' } = {}) {
@@ -360,7 +375,14 @@ function profileFields() {
       const group = mbtiGroups[type.group];
       return `<button type="button" class="mbti-option" data-action="mbti" data-value="${type.code}" aria-pressed="${type.code === mbtiType(p.mbti).code}" style="--mbti-color:${group.color};--mbti-soft:${group.soft}">${mbtiAvatar(type.code, 76)}<span><strong>${type.code}</strong><small>${type.name}</small></span></button>`;
     }).join('')}</div>
+    <div class="mbti-test"><a class="button button-secondary" href="https://www.16personalities.com/free-personality-test" target="_blank" rel="noopener noreferrer">Don't know yours? Take the free personality test${icon('arrow', 17)}</a><p>Opens the 16Personalities test (free, about 10 minutes, English and other languages) in a new tab. Come back and pick the matching type above.</p></div>
     ${notice('Self-reported for this demo. The 16-type framework is a reflection prompt, not a career assessment.')}
+  </section>
+  <section class="panel form-panel holland-panel">
+    <h2>Holland Code (RIASEC)</h2>
+    <p>Pick up to three letters in order, strongest interest first (for example I, then R, then C). Roles whose Holland Code is closer to yours rank higher in Explore Careers.</p>
+    <div id="holland-body">${hollandBody()}</div>
+    ${notice('Self-reported for this demo. Role codes are illustrative approximations and only a small part of the match score.')}
   </section>
   <section class="panel form-panel">
     <h2>Career preferences</h2>
@@ -396,10 +418,33 @@ function gapsFor(job) {
   }).sort((a, b) => b.priority - a.priority || b.weight - a.weight || skillName(a.skillId).localeCompare(skillName(b.skillId)));
 }
 
+// Holland Code (RIASEC): the user ranks up to three letters; each is weighted 3/2/1 and compared with the job's own code.
+function hollandCodes() {
+  const codes = profile().holland;
+  return Array.isArray(codes) ? codes.filter(code => hollandIndex[code]).slice(0, 3) : [];
+}
+
+function hollandMatch(job) {
+  const mine = hollandCodes();
+  const theirs = (jobHolland[job.id] || '').split('');
+  if (!mine.length || !theirs.length) return null;
+  const weights = [3, 2, 1];
+  let total = 0;
+  let best = 0;
+  mine.forEach((code, rank) => {
+    best += weights[rank] * weights[rank];
+    const at = theirs.indexOf(code);
+    if (at >= 0) total += weights[rank] * weights[at];
+  });
+  return Math.round(100 * total / best);
+}
+
 function compatibility(job) {
   const skillsMatch = Math.round(100 * job.requirements.reduce((sum, req) => sum + Math.min(score(req.skillId) / req.level, 1) * req.weight, 0));
   const interestMatch = job.tags.some(tag => profile().interests.includes(tag)) ? 100 : 50;
-  return Math.round(.85 * skillsMatch + .15 * interestMatch);
+  const holland = hollandMatch(job);
+  if (holland === null) return Math.round(.85 * skillsMatch + .15 * interestMatch);
+  return Math.round(.70 * skillsMatch + .15 * interestMatch + .15 * holland);
 }
 
 function rankedJobs() {
@@ -607,7 +652,7 @@ function jobCard(job, featured) {
     <p class="label">${job.sector}</p><h2>${job.title}</h2><p>${job.summary}</p>
     <div class="card-details"><div><strong>Matching skills</strong><div class="chips">${matched.length ? matched.map(item => chip(item)).join('') : '<span>None in the sample profile</span>'}</div></div>
     <div><strong>Primary gaps</strong><div class="chips">${priority.length ? priority.map(item => chip(item, true)).join('') : chip('Sample requirements covered')}</div></div>
-    <div><strong>Why this matches you</strong><p>${reason}${interest ? ' It also aligns with your interests.' : ''}</p></div></div>
+    <div><strong>Why this matches you</strong><p>${reason}${interest ? ' It also aligns with your interests.' : ''}${hollandMatch(job) === null ? '' : ` Holland Code ${jobHolland[job.id]} is a ${hollandMatch(job)}% match with your ${hollandCodes().join('')}.`}</p></div></div>
     ${employerLogos(job)}
     <div class="button-row">${button('Explore Role', 'role', { style: 'secondary', value: job.id })}${selected ? goButton('View Skill Gap', 'gap') : button('Choose as Target', 'target', { value: job.id, mark: 'arrow' })}</div>
   </article>`;
@@ -1036,6 +1081,7 @@ function saveProfile(form) {
   preferences.hours = Number(input.get('hours'));
   preferences.interests = input.getAll('interests');
   preferences.mbti = profile().mbti;
+  preferences.holland = hollandCodes();
   const info = Object.fromEntries(['name', 'qualification', 'field', 'experience', 'projects'].map(name => [name, input.get(name).trim()]));
   if (!info.name) {
     const nameField = form.elements.namedItem('name');
@@ -1142,6 +1188,21 @@ const actions = {
     main.querySelector(`.mbti-option[data-value="${code}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     shell();
     notify(type.code + ' · ' + type.name + ' selected.');
+  },
+  holland(code) {
+    if (!hollandIndex[code]) return;
+    const codes = hollandCodes();
+    if (codes.includes(code)) codes.splice(codes.indexOf(code), 1);
+    else if (codes.length < 3) codes.push(code);
+    else return notify('Choose up to three letters. Deselect one first.');
+    profile().holland = codes;
+    byId('holland-body').innerHTML = hollandBody();
+    main.querySelector(`.holland-option[data-value="${code}"]`)?.focus({ preventScroll: true });
+  },
+  'holland-clear'() {
+    profile().holland = [];
+    byId('holland-body').innerHTML = hollandBody();
+    main.querySelector('[data-action="holland-clear"]')?.focus({ preventScroll: true });
   },
   'clear-careers'() {
     state.careerSearch = '';

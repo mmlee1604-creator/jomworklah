@@ -181,6 +181,7 @@ Every feature below exists in the running app, not just in the pitch.
     <tr><td>16</td><td><b>Practical project recommender</b> — role-specific portfolio briefs generated for IT careers</td><td>roadmap phase 3</td></tr>
     <tr><td>17</td><td><b>Skills Atlas</b> — an interactive Malaysia-wide map of training supply, industry demand and the gap between them, in 2D and 3D</td><td><code>#/atlas</code></td></tr>
     <tr><td>18</td><td><b>Employer talent search</b> — the same matching engine, pointed the other way</td><td><code>/employer</code></td></tr>
+    <tr><td>19</td><td><b>Holland Code (RIASEC) interest matching</b> — pick up to three letters, or take the free O*NET Interest Profiler first; roles with a closer Holland Code rank higher (browser demo only)</td><td><code>#/profile</code>, <code>#/careers</code></td></tr>
   </tbody>
 </table>
 
@@ -378,6 +379,24 @@ fit           = round(0.85 × skillsMatch + 0.15 × interestMatch)
 The inner `skillsMatch` rounds **before** weighting — a detail the parity tests pin down, because it
 changes the published numbers.
 
+**Holland Code (RIASEC) — optional fifth signal in the browser demo.** On `#/profile` the user picks up
+to three letters (Realistic, Investigative, Artistic, Social, Enterprising, Conventional), strongest
+first. Users who do not know their code can open the free
+[O*NET Interest Profiler](https://www.mynextmove.org/explore/ip) from the same section, then come back
+and pick their top three. Each of the eight roles carries its own three-letter code. Letters are
+weighted 3 / 2 / 1 by rank:
+
+```
+hollandMatch = round(100 × Σ userWeight × jobWeight ÷ Σ userWeight²)     over letters both share
+fit          = round(0.70 × skillsMatch + 0.15 × interestMatch + 0.15 × hollandMatch)
+```
+
+With no letters selected the original `0.85 / 0.15` formula applies unchanged, so existing demo results
+do not move. When letters are selected, the role card adds a line such as "Holland Code ICE is a 85%
+match with your ICR." The selection is saved with the persona's other preferences. The logic lives in
+`frontend/public/js/app.js` (`hollandMatch`, `compatibility`) and the role codes in
+`frontend/public/js/mock-data.js` (`jobHolland`). The backend API and employer site do not use it yet.
+
 **Course relevance** sums the priorities of the gaps a pathway closes, then breaks ties on learning mode
 and location. Budget limits map `RM0–RM500` → 500 and `RM501–RM1,500` → 1500; a `NULL` fee means "price
 to verify" and only survives the filter when the budget is set to *All*.
@@ -421,6 +440,7 @@ Everything the recommendations are grounded in, counted from the seed:
 | Training providers | **5** | HRD Corp e-LATiH, UP_TVET, MYFutureJobs/PERKESO, MyMahir · TalentCorp, MySPIKE/NOSS |
 | Training pathways | **10** | illustrative, linked to real portal entry points |
 | MBTI types | **16** | with generated persona art |
+| Holland (RIASEC) types | **6** | with an illustrative three-letter code on each of the 8 careers (browser demo) |
 | Demo personas | **2** | Aina (IT diploma) and Amir (SPM + workshop) |
 | Employer candidates | **12** | 10 shared, 2 exclusive |
 | Atlas states / districts | **14 / 158** | official DOSM boundaries |
@@ -511,6 +531,7 @@ The pitch is stronger when the numbers are trustworthy, so the boundaries are st
 
 - **Every training pathway is fictional.** Provider portals are real entry points; course availability, fees, eligibility and recognition must be confirmed with the provider. The API keeps `fee = NULL` rather than inventing a price, and the UI shows "price to verify".
 - **Compatibility weights (85/15) and requirement levels are illustrative**, chosen to be defensible rather than derived from a validated labour-market model.
+- **Holland Code is self-reported and browser-only.** The role codes are our own illustrative approximations, not an official O*NET lookup, and the 70/15/15 weighting is a design choice. The external O*NET test is English only and its result is entered by hand. The backend and employer site do not use it yet.
 - **Skills Atlas mixes real and synthetic data.** State and district geometry comes from official DOSM/open data; supply, demand, gap, employer and institution figures are synthetic and labelled "Demo data".
 - **No real job-board or MOE/HRDCorp ingestion yet** — the catalogue is curated seed data.
 - **The frontend and backend are not yet connected** (see [Architecture](#6-architecture)); they are verified to agree, not wired to each other.
