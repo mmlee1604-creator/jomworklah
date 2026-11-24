@@ -8,7 +8,7 @@
 
 *Reimagine Malaysia* · Hackathon build
 
-**Live demo:** <[https://fleet-mistral-h3k2xg0.tmp.now/candidate](https://jomworklah-two.vercel.app)>
+**Live demo:** [https://fleet-mistral-h3k2xg0.tmp.now/candidate](https://jomworklah-two.vercel.app)
 
 [![Frontend](https://img.shields.io/badge/frontend-Next.js%2016%20·%20React%2019-e65536?style=flat-square)](frontend/)
 [![Backend](https://img.shields.io/badge/backend-Node%2024%20·%20Express%205%20·%20SQLite-087a63?style=flat-square)](backend/)
