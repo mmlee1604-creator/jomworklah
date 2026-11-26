@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { Router } from 'express';
 import { createAiAdapter } from './ai/index.js';
-import { createQwenDocClient } from './ai/qwen-doc.js';
+import { createDeepSeekOcrClient } from './ai/deepseek-ocr.js';
 import { requireAuth } from './middleware/auth.js';
 import { errorHandler, AppError } from './middleware/errors.js';
 import { notFound } from './middleware/not-found.js';
@@ -55,13 +55,13 @@ export function createApp({
   db,
   config,
   ai = createAiAdapter(config),
-  qwen = config.qwen.apiKey ? createQwenDocClient(config.qwen) : null
+  deepseek = config.deepseek.apiKey ? createDeepSeekOcrClient(config.deepseek) : null
 }) {
   const app = express();
   app.locals.db = db;
   app.locals.config = config;
   app.locals.ai = ai;
-  app.locals.qwen = qwen;
+  app.locals.deepseek = deepseek;
 
   app.disable('x-powered-by');
   app.use((req, _res, next) => {

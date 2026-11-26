@@ -29,11 +29,14 @@ export function loadConfig(env = process.env) {
       model: env.AI_MODEL || '',
       timeoutMs: toInt(env.AI_TIMEOUT_MS, 8000)
     },
-    qwen: {
-      apiKey: env.DASHSCOPE_API_KEY || '',
-      baseUrl: env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      model: env.QWEN_MODEL || 'qwen-doc-turbo',
-      timeoutMs: toInt(env.QWEN_TIMEOUT_MS, 60000)
+    deepseek: {
+      apiKey: env.DEEPSEEK_API_KEY || '',
+      baseUrl: env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+      model: env.DEEPSEEK_MODEL || 'deepseek-flash',
+      purpose: env.DEEPSEEK_OCR_PURPOSE || 'text_recognition',
+      ocrTimeoutMs: toInt(env.DEEPSEEK_OCR_TIMEOUT_MS, 180000),
+      timeoutMs: toInt(env.DEEPSEEK_TIMEOUT_MS, 60000),
+      maxTextChars: toInt(env.DEEPSEEK_MAX_TEXT_CHARS, 120000)
     },
     resume: {
       maxFileBytes: toInt(env.RESUME_MAX_BYTES, 10 * 1024 * 1024)

@@ -12,8 +12,8 @@
 
 [![Frontend](https://img.shields.io/badge/frontend-Next.js%2016%20·%20React%2019-e65536?style=flat-square)](frontend/)
 [![Backend](https://img.shields.io/badge/backend-Node%2024%20·%20Express%205%20·%20SQLite-087a63?style=flat-square)](backend/)
-[![Tests](https://img.shields.io/badge/tests-46%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
-[![AI](https://img.shields.io/badge/AI-rule%20engine%20%2B%20Qwen%20document%20parsing-173c35?style=flat-square)](backend/src/ai/)
+[![Tests](https://img.shields.io/badge/tests-70%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
+[![AI](https://img.shields.io/badge/AI-rule%20engine%20%2B%20DeepSeek%20OCR-173c35?style=flat-square)](backend/src/ai/)
 
 > **Our mission:** to bridge the gap between education, skills development and employment in Malaysia,
 > so every Malaysian has a clearer, more accessible path towards a meaningful career.
@@ -220,9 +220,9 @@ QodeFest/
 │   └── public/js/         the SPA, mock catalogue, Skills Atlas
 ├── backend/           Express 5 + SQLite API, scoring + roadmap + AI adapters
 │   ├── src/domain/        pure engine: scoring, roadmap, assessment, resume mapping
-│   ├── src/ai/            rule adapter · LLM adapter · Qwen document client
+│   ├── src/ai/            rule adapter · LLM adapter · DeepSeek OCR client
 │   ├── src/routes/        thin HTTP layer
-│   └── test/              46 tests, including prototype-parity assertions
+│   └── test/              70 tests, including prototype-parity assertions
 ├── slide deck/        the pitch deck (jom-kerja-lah.html)
 └── docs/screenshots/  the nine captures in section 2
 ```
@@ -236,11 +236,11 @@ flowchart TB
     subgraph BE["backend — Express 5"]
         R["routes"] --> S["services"] --> D["domain<br/>scoring · roadmap"]
         D --> DB[("SQLite<br/>node:sqlite")]
-        D --> AI["AI port<br/>rule | llm | qwen-doc"]
+        D --> AI["AI port<br/>rule | llm | deepseek-ocr"]
     end
     C -.->|planned| R
     E -.->|mirrors the same math| D
-    Q["Qwen doc-turbo<br/>resume parsing"] --> AI
+    Q["DeepSeek OCR<br/>resume parsing"] --> AI
 ```
 
 > [!IMPORTANT]
@@ -292,9 +292,31 @@ curl http://localhost:8787/api/health
 # {"data":{"status":"ok","db":"ok"}}
 ```
 
-Real resume parsing switches on automatically once `DASHSCOPE_API_KEY` is set in `.env`. Without a key,
+Real resume parsing switches on automatically once `DEEPSEEK_API_KEY` is set in `.env`. Without a key,
 `POST /api/parse-resume` returns realistic sample data honestly flagged `"is_simulated": true`, so the
 flow is still demoable.
+
+Resume parsing uses [DeepSeek's official OCR API](https://api-docs.deepseek.com/api/ocr/)
+(`POST /v1/tools/ocr`), followed by a chat completion to produce the existing resume JSON.
+PDF and DOCX are supported. The OCR request creates no Files API resource to delete.
+OCR and structured extraction are two separately billed API calls.
+
+Set these values in `backend/.env` and restart the backend:
+
+| Variable | Default / purpose |
+|---|---|
+| `DEEPSEEK_API_KEY` | Your backend-only DeepSeek key; empty means simulated auto mode |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` (optional `/v1` suffix accepted) |
+| `DEEPSEEK_MODEL` | `deepseek-flash`, the text-to-JSON model after OCR |
+| `DEEPSEEK_OCR_PURPOSE` | `text_recognition`, or `rich_layout_recognition` |
+| `DEEPSEEK_OCR_TIMEOUT_MS` | `180000` per OCR request |
+| `DEEPSEEK_TIMEOUT_MS` | `60000` per structured extraction request |
+| `DEEPSEEK_MAX_TEXT_CHARS` | `120000`; longer recognition results are rejected |
+
+These replace the old `DASHSCOPE_API_KEY` and `QWEN_*` settings. Use `?mode=live` to
+require real extraction; missing credentials and provider failures return errors.
+The independent `AI_*` settings still control narrative assessment and career explanations.
+The candidate browser upload remains simulated until the frontend is connected to this API.
 
 ---
 
@@ -417,7 +439,7 @@ so 8 hours a week compresses Aina's plan from `[2, 3, 2, 1]` to `[2, 2, 2, 1]`.
 |---|---|
 | `rule-adapter` | default, offline, deterministic — alias and keyword extraction with confidence scores |
 | `llm-adapter` | optional OpenAI-compatible narrative assessment and match explanation, 8s timeout, falls back to rules on any failure |
-| `qwen-doc` | Alibaba Cloud Model Studio `qwen-doc-turbo` for real PDF/DOCX parsing, with upload-then-delete guaranteed in a `finally` block |
+| `deepseek-ocr` | Official DeepSeek OCR for PDF/DOCX text recognition, followed by `deepseek-flash` for structured resume JSON; no Files API resource is created |
 
 Intelligence sits behind a port, so scoring never blocks on a provider and no adapter can corrupt a
 roadmap. The planned next signal is **semantic skill matching with Sentence Transformers**
@@ -484,7 +506,7 @@ memory, so nothing personal is uploaded during the demo.
 cd backend && npm test
 ```
 
-**46 tests, 0 failures.** They run against real SQLite and cover four things that could otherwise drift
+**70 tests, 0 failures.** They run against real SQLite and cover behavior that could otherwise drift
 silently:
 
 | Suite | Guards |
@@ -493,6 +515,7 @@ silently:
 | `roadmap.test.js` | week formula at 3/5/8 hours, fallback tasks, stable IDs, saved-course union, completions preserved on regeneration, orphan pruning |
 | `seed.test.js` | idempotent reruns, weights sum to 1, foreign-key integrity, expected catalogue counts |
 | `api.test.js` + `parse-resume.test.js` | session bootstrap, validation and auth failures, upload type and size rejection |
+| `deepseek-ocr.test.js` | PDF/DOCX multipart OCR, structured extraction, environment settings, provider errors and incomplete output (mocked provider; no paid API calls) |
 
 Parity is the point: the assertions encode the **frontend prototype's** published numbers, so the engine
 and the UI cannot quietly disagree.
@@ -518,7 +541,7 @@ whitelist, SHA-256-hashed bearer tokens, Zod validation with unknown keys stripp
 | Styling | own design system + Tailwind CDN | the CSS carries the identity; utilities for speed |
 | Backend | Node 24 · Express 5 · Zod | same language as the frontend |
 | Database | SQLite via built-in `node:sqlite` | zero setup, WAL, ports cleanly to Postgres |
-| AI | rule engine → OpenAI-compatible → Qwen `qwen-doc-turbo` | offline-first, live when a key exists |
+| AI | rule engine → OpenAI-compatible → DeepSeek OCR + `deepseek-flash` | offline-first, live when a key exists |
 | Tests | `node:test` | no runner to install |
 
 Brand palette, for reference: paper `#f5f3ec`, ink `#173c35`, teal `#087a63`, accent `#e65536`, route orange `#f97316`.

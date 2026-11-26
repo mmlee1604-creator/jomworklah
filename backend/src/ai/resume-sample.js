@@ -1,6 +1,6 @@
 /**
  * Predefined extraction used by the demonstration mode of POST /api/parse-resume.
- * The shape matches what Qwen is asked to return, so both modes travel through
+ * The shape matches what DeepSeek is asked to return, so both modes travel through
  * the same validation, mapping and persistence path.
  */
 const sample = {

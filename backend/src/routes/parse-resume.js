@@ -85,7 +85,7 @@ export function parseResumeRouter(config) {
       const file = await readResume(req, maxFileBytes);
       const data = await parseResume({
         db: req.app.locals.db,
-        qwen: req.app.locals.qwen ?? null,
+        deepseek: req.app.locals.deepseek ?? null,
         userId: req.user.id,
         file,
         mode: req.validatedQuery.mode,

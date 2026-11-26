@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { QwenDocError } from '../src/ai/qwen-doc.js';
+import { DeepSeekOcrError } from '../src/ai/deepseek-ocr.js';
 import { loadConfig } from '../src/config.js';
 import { api, makeTestApp } from './helpers.js';
 
@@ -45,27 +45,16 @@ async function guestToken(base) {
   return session.body.data.token;
 }
 
-function makeQwenStub(options = {}) {
-  const calls = { uploads: [], deletions: [], waits: [] };
+function makeDeepSeekStub(options = {}) {
+  const calls = { extractions: [] };
   const client = {
-    model: 'qwen-doc-turbo',
-    async upload(file) {
-      calls.uploads.push(file);
-      if (options.uploadFails) throw new QwenDocError('unavailable', 'Qwen upload failed: bad key');
-      return { id: 'file-stub-1', status: 'processed' };
-    },
-    async waitForProcessing(fileId) {
-      calls.waits.push(fileId);
-      if (options.documentFails) throw new QwenDocError('document', 'Qwen could not read the resume (file status: failed).');
-      return { id: fileId, status: 'processed' };
-    },
-    async extract() {
-      if (options.extractionFails) throw new QwenDocError('unavailable', 'Qwen extraction failed: connection reset');
+    model: 'deepseek-flash',
+    async extract(file) {
+      calls.extractions.push(file);
+      if (options.documentFails) throw new DeepSeekOcrError('document', 'DeepSeek could not read the resume.');
+      if (options.extractionFails) throw new DeepSeekOcrError('unavailable', 'DeepSeek extraction failed.');
+      if (options.busy) throw new DeepSeekOcrError('busy', 'DeepSeek is busy.');
       return options.extraction ?? {};
-    },
-    async remove(fileId) {
-      calls.deletions.push(fileId);
-      return true;
     }
   };
   return { client, calls };
@@ -191,9 +180,9 @@ test('persist=false previews the extraction without touching stored data', async
   assert.equal(saved.body.data.skills.every(skill => skill.evidenceLevel === 0), true);
 });
 
-test('mode=simulate skips Qwen even when it is configured', async t => {
-  const stub = makeQwenStub();
-  const ctx = await makeTestApp({}, { qwen: stub.client });
+test('mode=simulate skips DeepSeek even when it is configured', async t => {
+  const stub = makeDeepSeekStub();
+  const ctx = await makeTestApp({}, { deepseek: stub.client });
   t.after(() => ctx.close());
   const token = await guestToken(ctx.base);
 
@@ -201,12 +190,12 @@ test('mode=simulate skips Qwen even when it is configured', async t => {
   assert.equal(result.status, 200);
   assert.equal(result.body.data.is_simulated, true);
   assert.equal(result.body.data.file.mimetype, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-  assert.equal(stub.calls.uploads.length, 0);
+  assert.equal(stub.calls.extractions.length, 0);
 });
 
-test('live mode normalises the Qwen result and cleans the uploaded document up', async t => {
-  const stub = makeQwenStub({ extraction: messyExtraction });
-  const ctx = await makeTestApp({}, { qwen: stub.client });
+test('live mode normalises the DeepSeek result and persists profile and skills', async t => {
+  const stub = makeDeepSeekStub({ extraction: messyExtraction });
+  const ctx = await makeTestApp({}, { deepseek: stub.client });
   t.after(() => ctx.close());
   const token = await guestToken(ctx.base);
 
@@ -215,8 +204,8 @@ test('live mode normalises the Qwen result and cleans the uploaded document up',
 
   const data = result.body.data;
   assert.equal(data.is_simulated, false);
-  assert.equal(data.provider, 'qwen');
-  assert.equal(data.model, 'qwen-doc-turbo');
+  assert.equal(data.provider, 'deepseek');
+  assert.equal(data.model, 'deepseek-flash');
   assert.equal(data.resume.personalInfo.fullName, 'Aina Rahman');
   assert.equal(data.resume.personalInfo.location, 'Shah Alam');
   assert.equal(data.resume.education[0].institution, 'Kolej Technologi MARA');
@@ -226,10 +215,8 @@ test('live mode normalises the Qwen result and cleans the uploaded document up',
   assert.deepEqual(data.resume.technicalSkills.map(skill => skill.name), ['Excel', 'Power BI', 'SQL']);
   assert.deepEqual(data.resume.languages, [{ name: 'English', proficiency: 'B2' }]);
 
-  assert.equal(stub.calls.uploads[0].filename, 'aina-resume.pdf');
-  assert.deepEqual([...stub.calls.uploads[0].buffer].slice(0, 4), [0x25, 0x50, 0x44, 0x46]);
-  assert.deepEqual(stub.calls.waits, ['file-stub-1']);
-  assert.deepEqual(stub.calls.deletions, ['file-stub-1']);
+  assert.equal(stub.calls.extractions[0].filename, 'aina-resume.pdf');
+  assert.deepEqual([...stub.calls.extractions[0].buffer].slice(0, 4), [0x25, 0x50, 0x44, 0x46]);
 
   const saved = await api(ctx.base, 'GET', '/api/me', { token });
   assert.equal(saved.body.data.profile.headline, 'IT Intern');
@@ -240,9 +227,9 @@ test('live mode normalises the Qwen result and cleans the uploaded document up',
   assert.equal(evidence.sql, 4, 'work evidence earns demonstrated-in-substantial-work');
 });
 
-test('Qwen failures return an error instead of simulated data', async t => {
-  const failing = makeQwenStub({ extractionFails: true });
-  const ctx = await makeTestApp({}, { qwen: failing.client });
+test('DeepSeek failures return an error instead of simulated data', async t => {
+  const failing = makeDeepSeekStub({ extractionFails: true });
+  const ctx = await makeTestApp({}, { deepseek: failing.client });
   t.after(() => ctx.close());
   const token = await guestToken(ctx.base);
 
@@ -250,12 +237,11 @@ test('Qwen failures return an error instead of simulated data', async t => {
   assert.equal(result.status, 502);
   assert.equal(result.body.error.code, 'RESUME_EXTRACTION_FAILED');
   assert.equal(result.body.data, undefined);
-  assert.deepEqual(failing.calls.deletions, ['file-stub-1'], 'the uploaded document is still deleted');
 });
 
 test('unreadable documents and provider downtime have distinct codes', async t => {
-  const unreadable = makeQwenStub({ documentFails: true });
-  const unreadableCtx = await makeTestApp({}, { qwen: unreadable.client });
+  const unreadable = makeDeepSeekStub({ documentFails: true });
+  const unreadableCtx = await makeTestApp({}, { deepseek: unreadable.client });
   t.after(() => unreadableCtx.close());
   const firstToken = await guestToken(unreadableCtx.base);
 
@@ -263,29 +249,30 @@ test('unreadable documents and provider downtime have distinct codes', async t =
   assert.equal(document.status, 400);
   assert.equal(document.body.error.code, 'INVALID_DOCUMENT');
 
-  const unusable = makeQwenStub({ uploadFails: true });
-  const unusableCtx = await makeTestApp({}, { qwen: unusable.client });
+  const unusable = makeDeepSeekStub({ busy: true });
+  const unusableCtx = await makeTestApp({}, { deepseek: unusable.client });
   t.after(() => unusableCtx.close());
   const secondToken = await guestToken(unusableCtx.base);
 
   const rejected = await upload(unusableCtx.base, secondToken, { file: { name: 'resume.pdf', type: 'application/pdf', data: PDF } });
-  assert.equal(rejected.status, 502);
-  assert.equal(unusable.calls.deletions.length, 0, 'nothing to delete when the upload never happened');
+  assert.equal(rejected.status, 503);
+  assert.equal(rejected.body.error.code, 'AI_PROVIDER_BUSY');
 });
 
 test('mode=live without a configured key explains what is missing', async t => {
-  const ctx = await makeTestApp({}, { qwen: null });
+  const ctx = await makeTestApp({}, { deepseek: null });
   t.after(() => ctx.close());
   const token = await guestToken(ctx.base);
 
   const result = await upload(ctx.base, token, { file: { name: 'resume.pdf', type: 'application/pdf', data: PDF } }, '?mode=live');
   assert.equal(result.status, 503);
   assert.equal(result.body.error.code, 'AI_NOT_CONFIGURED');
+  assert.match(result.body.error.message, /DEEPSEEK_API_KEY/);
 });
 
-test('an empty Qwen result is treated as an unusable document', async t => {
-  const stub = makeQwenStub({ extraction: {} });
-  const ctx = await makeTestApp({}, { qwen: stub.client });
+test('an empty DeepSeek result is treated as an unusable document', async t => {
+  const stub = makeDeepSeekStub({ extraction: {} });
+  const ctx = await makeTestApp({}, { deepseek: stub.client });
   t.after(() => ctx.close());
   const token = await guestToken(ctx.base);
 
