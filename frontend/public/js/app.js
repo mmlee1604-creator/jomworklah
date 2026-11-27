@@ -71,6 +71,12 @@ function emptyJourney() {
 const saved = loadDemo();
 const demoPersonaKeys = Object.keys(personas);
 const authUser = window.JKL_AUTH_USER || null;
+personas.guest = {
+  name: 'Guest', headline: 'Guest candidate', photo: null,
+  qualification: 'Other', field: '', experience: '', projects: '', location: '',
+  budget: 'Flexible', hours: 5, mode: 'Online', interests: [], mbti: null, holland: [],
+  scores: Object.fromEntries(skills.map(skill => [skill.id, 0]))
+};
 if (authUser) {
   const metadataName = authUser.user_metadata?.full_name;
   const accountName = String(metadataName || authUser.email?.split('@')[0] || 'New User').slice(0, 70);
@@ -81,11 +87,11 @@ if (authUser) {
     scores: Object.fromEntries(skills.map(skill => [skill.id, 0]))
   };
 }
-const personaKeys = [...demoPersonaKeys, ...(authUser ? ['account'] : [])];
+const personaKeys = [...demoPersonaKeys, 'guest', ...(authUser ? ['account'] : [])];
 const journeys = Object.fromEntries(personaKeys.map(id => [id, emptyJourney()]));
 const state = {
   view: authUser ? 'upload' : 'welcome',
-  persona: authUser ? 'account' : (demoPersonaKeys.includes(saved.persona) ? saved.persona : 'aina'),
+  persona: authUser ? 'account' : (saved.persona === 'guest' ? 'guest' : (demoPersonaKeys.includes(saved.persona) ? saved.persona : 'aina')),
   profiles: Object.fromEntries(Object.entries(personas).map(([id, persona]) => [id, {
     ...persona, ...saved.extras?.[id], scores: { ...persona.scores }
   }])),
@@ -153,11 +159,17 @@ async function ensureSession(personaId) {
     try {
       return (await jklApi.get('/me', { token: tokens[personaId] })).data;
     } catch (error) {
-      if (error.status !== 401) throw error;
+      if (error.status !== 401 && error.code !== 'PROFILE_NOT_FOUND') throw error;
+      if (error.code === 'PROFILE_NOT_FOUND') {
+        await jklApi.delete('/me', { token: tokens[personaId] });
+      }
       delete tokens[personaId];
+      delete hydrated[personaId];
     }
   }
-  const { data } = await jklApi.post('/demo/session', { personaKey: personaId });
+  const { data } = personaId === 'guest'
+    ? await jklApi.post('/session')
+    : await jklApi.post('/demo/session', { personaKey: personaId });
   tokens[personaId] = data.token;
   saveTokens();
   return data;
@@ -329,7 +341,9 @@ function persist() {
     const extras = Object.fromEntries(demoPersonaKeys.map(id => [id, {
       mbti: state.profiles[id].mbti, holland: state.profiles[id].holland
     }]));
-    localStorage.setItem(storageKey, JSON.stringify({ version: 2, persona: demoPersonaKeys.includes(state.persona) ? state.persona : saved.persona, extras }));
+    const persona = state.persona === 'guest' ? 'guest'
+      : demoPersonaKeys.includes(state.persona) ? state.persona : saved.persona;
+    localStorage.setItem(storageKey, JSON.stringify({ version: 2, persona, extras }));
   } catch {
     // The prototype also works in browsers that block file-origin storage.
   }
@@ -483,6 +497,7 @@ function shell() {
   const landing = state.view === 'welcome';
   const workspace = !onboardingViews.includes(state.view);
   const accountMode = state.persona === 'account';
+  const guestMode = state.persona === 'guest';
   const logo = '<img src="assets/jomworklah-logo.svg" alt="JomWorkLah" width="187" height="42">';
   const links = nav.map(([id, label, mark]) => `<button type="button" class="nav-link${id === state.view ? ' selected' : ''}" data-action="go" data-value="${id}" ${id === state.view ? 'aria-current="page"' : ''}>${icon(mark, 19)}${label}</button>`).join('');
   byId('header').innerHTML = `<div class="header-inner content-width flex items-center justify-between">
@@ -490,6 +505,9 @@ function shell() {
     ${landing ? `<nav class="landing-nav flex items-center" aria-label="Main navigation"><a href="#why-it-matters" data-action="landing-section" data-value="why-it-matters">Why it matters</a><a href="#how-it-works" data-action="landing-section" data-value="how-it-works">How it works</a><a class="emp-entry" href="/employer">For employers</a>${authUser ? '<a href="/candidate#upload">My workspace</a><button type="button" class="button button-plain" data-action="sign-out">Sign out</button>' : '<a href="/login">Sign in</a><a class="button button-secondary" href="/signup">Create account</a>'}${button('Explore demo', 'persona', { style: 'plain', mark: 'external' })}</nav>` :
       accountMode ? `<div class="header-actions"><span class="account-tag">${escapeHTML(profile().name.split(' ')[0])}</span>
         <button type="button" class="button button-secondary" data-action="sign-out">Sign out</button>
+        ${workspace ? `<button class="icon-button mobile-menu" type="button" data-action="menu" aria-label="Open navigation">${icon('menu')}</button>` : ''}</div>` :
+      guestMode ? `<div class="header-actions"><span class="account-tag">Guest mode</span>
+        <a class="button button-secondary" href="/signup">Create account</a>
         ${workspace ? `<button class="icon-button mobile-menu" type="button" data-action="menu" aria-label="Open navigation">${icon('menu')}</button>` : ''}</div>` :
       `<div class="header-actions"><span class="demo-tag"><span class="orange-dot"></span>Demo mode</span>
         <button type="button" class="button button-secondary persona-chip" data-action="persona" aria-label="Change demo persona">${personaPhoto(state.persona, 30)}<span>${escapeHTML(personas[state.persona].name.split(' ')[0])} · Demo</span>${icon('down', 17)}</button>
@@ -531,8 +549,8 @@ function landingView() {
         <p class="eyebrow"><span class="orange-dot"></span>Malaysia’s career navigator</p>
         <h1>Your skills have<br class="hero-break"> a future. <em>Jom find it.</em></h1>
         <p class="lede">Discover your strengths, explore Malaysian career paths and make a plan for what to learn next.</p>
-        <div class="hero-actions"><a class="button button-primary" href="${authUser ? '/candidate#upload' : '/signup'}">${authUser ? 'Analyse My Resume' : 'Create an Account' }${icon('arrow', 17)}</a>${button('Try with Demo Profile', 'persona', { style: 'secondary', mark: 'play' })}</div>
-        ${notice('Demo files are never uploaded. Account resumes are analysed, extracted details are saved to your account, and the original file is discarded.', 'lock')}
+        <div class="hero-actions">${authUser ? `<a class="button button-primary" href="/candidate#upload">Analyse My Resume${icon('arrow', 17)}</a>` : `${button('Upload Resume as Guest', 'start-guest', { mark: 'upload' })}${button('Try with Demo Profile', 'persona', { style: 'secondary', mark: 'play' })}`}</div>
+        ${notice('Guest and account resumes are analysed by our backend; the original file is discarded. Demo profile uploads use sample data and never send a file.', 'lock')}
       </div>
       <figure class="hero-figure">
         <div class="hero-map"><img src="assets/hero-technician.webp" alt="A student assembling a robotics kit beside a laptop showing training, campus and career paths" width="1100" height="825" fetchpriority="high"></div>
@@ -568,7 +586,7 @@ function landingView() {
     <section class="features content-width" id="how-it-works" tabindex="-1" aria-labelledby="features-title">
       <p class="label">How it works</p>
       <h2 id="features-title">Five steps from resume to roadmap</h2>
-      <p class="lede">Explore with a sample profile, or create an account to build and save your own skills roadmap using Malaysian career data.</p>
+      <p class="lede">Explore with a sample profile, upload a resume as a guest, or create an account to keep your own skills roadmap.</p>
       <ol class="feature-grid">${steps.map(([mark, heading, description], index) => `<li class="panel feature"><div class="feature-top"><span class="tile-icon">${icon(mark, 20)}</span><span class="label">Step ${index + 1}</span></div><h3>${heading}</h3><p>${description}</p></li>`).join('')}</ol>
       ${button('Explore demo', 'persona', { mark: 'arrow' })}
     </section>
@@ -577,23 +595,24 @@ function landingView() {
 
 function uploadView() {
   const accountMode = state.persona === 'account';
+  const guestMode = state.persona === 'guest';
   return `<div class="onboarding content-width narrow">
     ${goButton('Back to welcome', 'welcome', 'plain', 'back')}
-    ${title('Resume upload', accountMode ? 'Build your profile from a resume' : 'Start with a resume', accountMode ? 'Upload a PDF or DOCX file to extract your experience and skills into your account.' : 'Upload a PDF or DOCX file to generate a sample skills profile.')}
+    ${title('Resume upload', accountMode ? 'Build your profile from a resume' : guestMode ? 'Build a guest profile from your resume' : 'Start with a resume', accountMode ? 'Upload a PDF or DOCX file to extract your experience and skills into your account.' : guestMode ? 'Upload a PDF or DOCX file to extract your experience and skills without creating an account.' : 'Upload a PDF or DOCX file to generate a sample skills profile.')}
     <section class="panel upload-panel">
       <label id="dropzone" class="dropzone" for="resume-file">
         <input id="resume-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="sr-only" aria-describedby="upload-status upload-note" ${state.processing ? 'disabled' : ''}>
         <span class="tile-icon">${icon('upload', 24)}</span>
         <strong>Drop your resume here or browse files</strong><span>PDF or DOCX · Up to 5 MB</span>
       </label>
-      <div id="upload-status" aria-live="polite">${state.fileError ? `<p class="error">${escapeHTML(state.fileError)}</p>` : ''}${state.file ? `<div class="selected-file flex items-center">${icon('file')}<div><strong>${escapeHTML(state.file.name)}</strong><span>${state.file.size} · ${state.processing ? (accountMode ? 'Analysing resume' : 'Preparing example') : 'Ready to analyse'}</span></div>${button('Remove', 'remove-file', { style: 'plain', attrs: state.processing ? 'disabled' : '' })}</div>` : ''}</div>
+      <div id="upload-status" aria-live="polite">${state.fileError ? `<p class="error">${escapeHTML(state.fileError)}</p>` : ''}${state.file ? `<div class="selected-file flex items-center">${icon('file')}<div><strong>${escapeHTML(state.file.name)}</strong><span>${state.file.size} · ${state.processing ? (guestMode || accountMode ? 'Analysing resume' : 'Preparing example') : 'Ready to analyse'}</span></div>${button('Remove', 'remove-file', { style: 'plain', attrs: state.processing ? 'disabled' : '' })}</div>` : ''}</div>
       <div class="button-row">
-        ${button(accountMode ? 'Analyse Resume' : 'Generate Demo Skills Profile', 'process-resume', { mark: 'arrow', attrs: state.file && !state.processing ? '' : 'disabled' })}
-        ${accountMode ? '' : button('Use Sample Resume (Aina)', 'sample-resume', { style: 'secondary', attrs: state.processing ? 'disabled' : '' })}
+        ${button(accountMode || guestMode ? 'Analyse Resume' : 'Generate Demo Skills Profile', 'process-resume', { mark: 'arrow', attrs: state.file && !state.processing ? '' : 'disabled' })}
+        ${!accountMode && !guestMode ? button('Use Sample Resume (Aina)', 'sample-resume', { style: 'secondary', attrs: state.processing ? 'disabled' : '' }) : ''}
       </div>
-      <p id="processing-message" class="loading-message" role="status" ${state.processing ? '' : 'hidden'}>${state.processing ? (accountMode ? 'Analysing your resume securely…' : 'Demo simulation · Preparing a sample skills profile…') : ''}</p>
+      <p id="processing-message" class="loading-message" role="status" ${state.processing ? '' : 'hidden'}>${state.processing ? (accountMode || guestMode ? 'Analysing your resume securely…' : 'Demo simulation · Preparing a sample skills profile…') : ''}</p>
     </section>
-    <div id="upload-note">${notice(accountMode ? 'Your resume is sent to our backend and DeepSeek for extraction, then discarded. Extracted profile details and skills are saved to your account; the original file is not stored.' : 'The demo uses a prewritten sample profile. Choosing a file shares its name and size with this page for this session.', 'lock')}</div>
+    <div id="upload-note">${notice(accountMode ? 'Your resume is sent to our backend and DeepSeek for extraction, then discarded. Extracted profile details and skills are saved to your account; the original file is not stored.' : guestMode ? 'No account is required. Extracted profile details and skills are saved to this guest session. The original file is discarded after parsing.' : 'The demo uses a prewritten sample profile. Choosing a file shares its name and size with this page for this session.', 'lock')}</div>
   </div>`;
 }
 
@@ -601,10 +620,11 @@ function profileFields() {
   const p = profile();
   const selectedType = mbtiType(p.mbti);
   const accountMode = state.persona === 'account';
+  const guestMode = state.persona === 'guest';
   return `<section class="panel form-panel">
-    <h2>Profile details</h2><p>${accountMode ? 'Review and edit your personal details and resume evidence.' : 'Use fictional details for this demo. Text fields and skills stay in this session.'}</p>
+    <h2>Profile details</h2><p>${accountMode ? 'Review and edit your personal details and resume evidence.' : guestMode ? 'Review and edit the details extracted from your resume.' : 'Use fictional details for this demo. Text fields and skills stay in this session.'}</p>
     <div class="form-grid">
-      <label class="field"><span>${accountMode ? 'Full name' : 'Demo name'}</span><input name="name" required maxlength="70" value="${escapeHTML(p.name)}"></label>
+      <label class="field"><span>${accountMode || guestMode ? 'Full name' : 'Demo name'}</span><input name="name" required maxlength="70" value="${escapeHTML(p.name)}"></label>
       ${selectField('qualification', 'Qualification', ['SPM', 'Certificate', 'Diploma', 'Degree', 'Other'], p.qualification)}
       <label class="field full"><span>Field of study</span><input name="field" maxlength="100" value="${escapeHTML(p.field)}"></label>
       <label class="field"><span>Experience summary</span><textarea rows="3" name="experience" maxlength="900">${escapeHTML(p.experience)}</textarea></label>
@@ -625,13 +645,13 @@ function profileFields() {
       return `<button type="button" class="mbti-option" data-action="mbti" data-value="${type.code}" aria-pressed="${type.code === selectedType?.code}" style="--mbti-color:${group.color};--mbti-soft:${group.soft}">${mbtiAvatar(type.code, 76)}<span><strong>${type.code}</strong><small>${type.name}</small></span></button>`;
     }).join('')}</div>
     <div class="mbti-test"><a class="button button-secondary" href="https://www.16personalities.com/free-personality-test" target="_blank" rel="noopener noreferrer">Don't know yours? Take the free personality test${icon('arrow', 17)}</a><p>Opens the 16Personalities test (free, about 10 minutes, English and other languages) in a new tab. Come back and pick the matching type above.</p></div>
-    ${notice(accountMode ? 'Optional and self-reported. The 16-type framework is a reflection prompt, not a career assessment.' : 'Self-reported for this demo. The 16-type framework is a reflection prompt, not a career assessment.')}
+    ${notice(accountMode || guestMode ? 'Optional and self-reported. The 16-type framework is a reflection prompt, not a career assessment.' : 'Self-reported for this demo. The 16-type framework is a reflection prompt, not a career assessment.')}
   </section>
   <section class="panel form-panel holland-panel">
     <h2>Holland Code (RIASEC)</h2>
     <p>Pick up to three letters in order, strongest interest first (for example I, then R, then C). Roles whose Holland Code is closer to yours rank higher in Explore Careers.</p>
     <div id="holland-body">${hollandBody()}</div>
-    ${notice(accountMode ? 'Optional and self-reported. Role codes are illustrative approximations and only a small part of the match score.' : 'Self-reported for this demo. Role codes are illustrative approximations and only a small part of the match score.')}
+    ${notice(accountMode || guestMode ? 'Optional and self-reported. Role codes are illustrative approximations and only a small part of the match score.' : 'Self-reported for this demo. Role codes are illustrative approximations and only a small part of the match score.')}
   </section>
   <section class="panel form-panel">
     <h2>Career preferences</h2>
@@ -644,18 +664,19 @@ function profileFields() {
     </div>
   </section>
   <section class="panel form-panel">
-    <h2>Resume evidence</h2><p>${accountMode ? 'Review the skill evidence extracted from your resume and adjust scores as needed.' : 'Choose scores from 0 to 5. Each score represents the type of evidence in this illustrative profile.'}</p>
+    <h2>Resume evidence</h2><p>${accountMode || guestMode ? 'Review the skill evidence extracted from your resume and adjust scores as needed.' : 'Choose scores from 0 to 5. Each score represents the type of evidence in this illustrative profile.'}</p>
     <div class="evidence-edit">${skills.map(skill => `<div class="evidence-control"><label for="edit-${skill.id}">${skill.name}<small>${skill.category}</small></label><select id="edit-${skill.id}" name="skill-${skill.id}" aria-describedby="desc-${skill.id}" data-evidence>${selectOptions(evidenceLegend.map((description, value) => [value, value + ' · ' + description]), score(skill.id))}</select><span class="sr-only" id="desc-${skill.id}">${skill.description}</span></div>`).join('')}</div>
-    ${accountMode ? '' : notice('All scores are illustrative, including any sample score of 5.')}
+    ${accountMode || guestMode ? '' : notice('All scores are illustrative, including any sample score of 5.')}
   </section>`;
 }
 
 function reviewView() {
   const accountMode = state.persona === 'account';
+  const guestMode = state.persona === 'guest';
   return `<div class="onboarding content-width review-width">
     ${goButton(reviewReturn === 'upload' ? 'Back to upload' : 'Back to welcome', reviewReturn, 'plain', 'back')}
-    ${title(accountMode ? 'Your profile' : 'Sample profile', accountMode ? 'Review your <em>resume profile.</em>' : 'Review your <em>demo profile.</em>', accountMode ? 'Check the information extracted from your resume and correct anything before continuing.' : 'These example experiences and preferences drive the career matches. Adjust anything before continuing.')}
-    <form id="profile-form">${profileFields()}<div class="button-row"><button type="submit" class="button button-primary">Save &amp; Continue${icon('arrow', 17)}</button>${accountMode ? '' : button('Reset to Sample Profile', 'sample-reset', { style: 'secondary' })}</div></form>
+    ${title(accountMode || guestMode ? 'Your profile' : 'Sample profile', accountMode || guestMode ? 'Review your <em>resume profile.</em>' : 'Review your <em>demo profile.</em>', accountMode || guestMode ? 'Check the information extracted from your resume and correct anything before continuing.' : 'These example experiences and preferences drive the career matches. Adjust anything before continuing.')}
+    <form id="profile-form">${profileFields()}<div class="button-row"><button type="submit" class="button button-primary">Save &amp; Continue${icon('arrow', 17)}</button>${!accountMode && !guestMode ? button('Reset to Sample Profile', 'sample-reset', { style: 'secondary' }) : ''}</div></form>
   </div>`;
 }
 
@@ -850,7 +871,7 @@ function dashboardView() {
     ['route', 'Roadmap completion', progress.percent + '%', 'roadmap', `${progress.done} of ${progress.total} tasks complete`]
   ];
   return `
-    ${title('Overview', 'Hi ' + escapeHTML(profile().name.trim().split(/\s+/)[0]) + ', here is your career overview', state.persona === 'account' ? 'Your skills, career matches and the next steps in your plan.' : 'Your sample skills, the closest career matches and the next steps in your plan.', `<div class="heading-actions">${type ? `<span class="persona-badge" style="--mbti-soft:${group.soft};--mbti-color:${group.color}" title="MBTI personality: ${type.code} · ${type.name}">${personaPhoto(state.persona, 30)}<span><strong>${type.code}</strong><small>${type.name}</small></span></span>` : ''}${goButton('Explore Careers', 'careers')}</div>`)}
+    ${title('Overview', 'Hi ' + escapeHTML(profile().name.trim().split(/\s+/)[0]) + ', here is your career overview', state.persona === 'account' || state.persona === 'guest' ? 'Your skills, career matches and the next steps in your plan.' : 'Your sample skills, the closest career matches and the next steps in your plan.', `<div class="heading-actions">${type ? `<span class="persona-badge" style="--mbti-soft:${group.soft};--mbti-color:${group.color}" title="MBTI personality: ${type.code} · ${type.name}">${personaPhoto(state.persona, 30)}<span><strong>${type.code}</strong><small>${type.name}</small></span></span>` : ''}${goButton('Explore Careers', 'careers')}</div>`)}
     <section class="metric-grid" aria-label="Career summary">${metrics.map(([mark, label, value, view, note]) => `<button type="button" class="panel metric" data-action="go" data-value="${view}"><span class="metric-label"><span class="tile-icon">${icon(mark, 17)}</span>${label}</span><strong>${value}</strong><span>${note}</span></button>`).join('')}</section>
     <div class="dashboard-grid">
       <section class="panel dashboard-panel"><div class="section-head"><h2>Your Skills at a Glance</h2>${goButton('All skills', 'skills', 'plain')}</div>${known.length ? evidenceBars(known.slice(0, 6)) : '<p>Enter evidence in your profile to see your strongest sample skills here.</p>'}</section>
@@ -1177,17 +1198,18 @@ function atlasView() {
 function settingsView() {
   const type = mbtiType(profile().mbti);
   const accountMode = state.persona === 'account';
-  return `${title('My profile', 'Your profile and preferences', accountMode ? 'Edit the details that shape your career matches and learning plan.' : 'Edit the sample details that shape your career matches and learning plan.', accountMode ? '' : button('Change Demo Persona', 'persona', { style: 'secondary', mark: 'down' }))}
+  const guestMode = state.persona === 'guest';
+  return `${title('My profile', 'Your profile and preferences', accountMode || guestMode ? 'Edit the details that shape your career matches and learning plan.' : 'Edit the sample details that shape your career matches and learning plan.', accountMode || guestMode ? '' : button('Change Demo Persona', 'persona', { style: 'secondary', mark: 'down' }))}
     <div class="settings-grid">
       <form id="profile-form">${profileFields()}<button type="submit" class="button button-primary">Save Changes${icon('check', 17)}</button></form>
       <aside class="panel dashboard-panel settings-info">
         <div class="settings-persona">${personaPhoto(state.persona, 72)}<div><strong>${escapeHTML(profile().name)}</strong><span>${type ? `${type.code} · ${type.name}` : 'MBTI not selected'}</span></div></div>
-        <h2>${accountMode ? 'Account settings' : 'Demo settings'}</h2>
-        <dl>${accountMode ? '' : `<dt>Sample persona</dt><dd>${escapeHTML(profile().name)}</dd>`}<dt>MBTI personality</dt><dd>${type ? `${type.code} · ${type.name} (${mbtiGroups[type.group].label})` : 'Not selected'}</dd><dt>Target career</dt><dd>${targetJob()?.title || 'Choose a career in Career Explorer'}</dd><dt>Selected resume</dt><dd>${state.file ? escapeHTML(state.file.name) + ' · This session only' : accountMode ? 'Original file discarded after processing' : 'Using a sample profile'}</dd></dl>
-        ${notice(accountMode ? 'Your profile, skills, MBTI, Holland Code, target career, saved pathways and roadmap are saved to your account. The original resume is discarded after processing.' : 'Your profile, target career, saved pathways, roadmap, MBTI and Holland picks are saved on the server for this demo session. The chosen resume file is never stored.', 'lock')}
+        <h2>${accountMode ? 'Account settings' : guestMode ? 'Guest settings' : 'Demo settings'}</h2>
+        <dl>${accountMode || guestMode ? '' : `<dt>Sample persona</dt><dd>${escapeHTML(profile().name)}</dd>`}<dt>MBTI personality</dt><dd>${type ? `${type.code} · ${type.name} (${mbtiGroups[type.group].label})` : 'Not selected'}</dd><dt>Target career</dt><dd>${targetJob()?.title || 'Choose a career in Career Explorer'}</dd><dt>Selected resume</dt><dd>${state.file ? escapeHTML(state.file.name) + ' · This session only' : accountMode || guestMode ? 'Original file discarded after processing' : 'Using a sample profile'}</dd></dl>
+        ${notice(accountMode ? 'Your profile, skills, MBTI, Holland Code, target career, saved pathways and roadmap are saved to your account. The original resume is discarded after processing.' : guestMode ? 'Your profile, skills and progress are saved to this guest session. The original resume is discarded after processing.' : 'Your profile, target career, saved pathways, roadmap, MBTI and Holland picks are saved on the server for this demo session. The chosen resume file is never stored.', 'lock')}
         ${goButton('How scores work', 'skills', 'plain', 'info')}
         ${goButton('Upload New Resume', 'upload', 'plain', 'upload')}
-        ${accountMode ? '<button type="button" class="button button-secondary" data-action="sign-out">Sign out</button>' : `${button('Reset Demo', 'reset-demo', { style: 'secondary' })}${button('Clear Saved Demo Progress', 'clear-saved', { style: 'secondary' })}`}
+        ${accountMode ? '<button type="button" class="button button-secondary" data-action="sign-out">Sign out</button>' : guestMode ? '<a class="button button-secondary" href="/signup">Create an account</a>' : `${button('Reset Demo', 'reset-demo', { style: 'secondary' })}${button('Clear Saved Demo Progress', 'clear-saved', { style: 'secondary' })}`}
       </aside>
     </div>`;
 }
@@ -1360,6 +1382,31 @@ async function addCourse(id) {
   notify(journey().roadmap ? 'Pathway added to your roadmap.' : 'Pathway saved. It will appear when you generate your roadmap.');
 }
 
+async function processGuestResume() {
+  if (!state.uploadFile || state.processing) return;
+  const operation = {};
+  state.processing = operation;
+  draw();
+  try {
+    await ensureSession('guest');
+    await jklApi.upload('/parse-resume?mode=live', state.uploadFile, { token: tokens.guest });
+    const { data } = await jklApi.get('/me', { token: tokens.guest });
+    applyMe('guest', data);
+    await loadCareers('guest');
+    state.uploadFile = null;
+    state.processing = false;
+    state.reviewPending = true;
+    reviewReturn = 'upload';
+    go('profile-review');
+    notify('Resume analysed. Review your guest profile before continuing.');
+  } catch (error) {
+    state.processing = false;
+    state.fileError = error.message;
+    if (state.view === 'upload') draw();
+    notify('Could not analyse your resume: ' + error.message);
+  }
+}
+
 async function processAccountResume() {
   if (!state.uploadFile || state.processing) return;
   const operation = {};
@@ -1426,7 +1473,7 @@ async function saveProfile(form) {
   const info = Object.fromEntries(['name', 'qualification', 'field', 'experience', 'projects'].map(name => [name, input.get(name).trim()]));
   if (!info.name) {
     const nameField = form.elements.namedItem('name');
-    nameField.setCustomValidity(state.persona === 'account' ? 'Enter your name.' : 'Enter a name for the demo profile.');
+    nameField.setCustomValidity(state.persona === 'account' || state.persona === 'guest' ? 'Enter your name.' : 'Enter a name for the demo profile.');
     nameField.reportValidity();
     return;
   }
@@ -1511,6 +1558,21 @@ async function resetDemo(all) {
 
 const actions = {
   go,
+  async 'start-guest'() {
+    try {
+      state.persona = 'guest';
+      await hydratePersona('guest');
+      persist();
+      state.file = null;
+      state.uploadFile = null;
+      state.fileError = '';
+      state.reviewPending = false;
+      go('upload');
+    } catch (error) {
+      state.persona = demoPersonaKeys.includes(saved.persona) ? saved.persona : 'aina';
+      notify('Could not start a guest session: ' + error.message);
+    }
+  },
   'landing-section'(id) {
     const section = byId(id);
     section.focus({ preventScroll: true });
@@ -1552,7 +1614,9 @@ const actions = {
     draw();
     byId('resume-file').focus({ preventScroll: true });
   },
-  'process-resume': () => state.persona === 'account' ? processAccountResume() : simulateResume(),
+  'process-resume': () => state.persona === 'account'
+    ? processAccountResume()
+    : state.persona === 'guest' ? processGuestResume() : simulateResume(),
   'sample-resume': () => reviewPersona('aina', 'upload'),
   async 'sample-reset'() {
     try {
@@ -1766,7 +1830,8 @@ window.addEventListener('popstate', () => {
 // Landing needs no data; a deep link waits for the server copy of the persona so it can route correctly.
 async function boot() {
   let wanted = location.hash.slice(1);
-  if ((wanted && wanted !== 'welcome') || (state.persona === 'account' && !wanted)) {
+  const personalSession = state.persona === 'account' || state.persona === 'guest';
+  if ((wanted && wanted !== 'welcome') || (personalSession && !wanted)) {
     main.innerHTML = '<p class="loading-message" role="status" style="padding:2rem">Loading your workspace…</p>';
     try {
       await hydratePersona(state.persona);
@@ -1775,11 +1840,11 @@ async function boot() {
     }
   }
   if (!wanted) {
-    wanted = state.persona === 'account'
+    wanted = personalSession
       ? (journey().started ? 'dashboard' : 'upload')
       : 'welcome';
   }
-  if (state.persona === 'account' && !journey().started && !onboardingViews.includes(wanted) && wanted !== 'welcome') {
+  if (personalSession && !journey().started && !onboardingViews.includes(wanted) && wanted !== 'welcome') {
     wanted = 'upload';
   }
   showView(wanted, false);
