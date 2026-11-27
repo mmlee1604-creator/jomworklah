@@ -1,7 +1,11 @@
 // Minimal API client for the candidate app. Public endpoints need no token; user endpoints
 // (added in later steps) send the bearer token for the current persona.
 (function () {
-  const base = String(window.JKL_API_BASE || 'http://localhost:8787/api').replace(/\/+$/, '');
+  const localApiHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const defaultApiBase = localApiHost
+    ? 'http://localhost:8787/api'
+    : 'https://jomworklah.onrender.com/api';
+  const base = String(window.JKL_API_BASE || defaultApiBase).replace(/\/+$/, '');
   const TIMEOUT_MS = 15000;
 
   class ApiError extends Error {
