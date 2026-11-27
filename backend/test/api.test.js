@@ -1,6 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { loadConfig } from '../src/config.js';
 import { api, demoToken, makeTestApp } from './helpers.js';
+
+test('production frontend origin is allowed alongside configured preview origins', async t => {
+  const config = loadConfig({
+    NODE_ENV: 'production',
+    FRONTEND_ORIGIN: 'https://preview-jomworklah.vercel.app'
+  });
+  const ctx = await makeTestApp({ frontendOrigin: config.frontendOrigin });
+  t.after(() => ctx.close());
+
+  const response = await fetch(`${ctx.base}/api/demo/session`, {
+    method: 'OPTIONS',
+    headers: {
+      origin: 'https://jomworklah-two.vercel.app',
+      'access-control-request-method': 'POST',
+      'access-control-request-headers': 'content-type'
+    }
+  });
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('access-control-allow-origin'), 'https://jomworklah-two.vercel.app');
+});
 
 test('health and public catalogue are available without auth', async t => {
   const ctx = await makeTestApp();

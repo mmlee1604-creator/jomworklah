@@ -366,8 +366,9 @@ npm run supabase:seed:generate
 1. In Supabase, get the PostgreSQL connection string (use the transaction pooler where appropriate)
    and set it as `DATABASE_URL` in `backend/.env`, then run `npm run db:migrate` and `npm run db:seed`.
 2. Deploy the repository's `render.yaml` blueprint. In Render, set `DATABASE_URL`,
-   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `FRONTEND_ORIGIN` to the Supabase values and the
-   exact Vercel site origin. Do not expose the database URL or service-role key to the browser.
+   `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` to the Supabase values. `FRONTEND_ORIGIN`
+   defaults to the production Vercel site; add preview or custom frontend origins as needed. Do not
+   expose the database URL or service-role key to the browser.
 3. Create a Vercel project rooted at `frontend/`. The frontend defaults to
    `https://jomworklah.onrender.com/api`; set `NEXT_PUBLIC_API_BASE` to override it and deploy.
 4. Confirm the Render health endpoint at `https://your-api.onrender.com/api/health`.

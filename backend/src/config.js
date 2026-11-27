@@ -15,13 +15,17 @@ const toInt = (value, fallback) => {
 
 export function loadConfig(env = process.env) {
   const nodeEnv = env.NODE_ENV || 'development';
+  const frontendOrigin = [...new Set([
+    ...String(env.FRONTEND_ORIGIN || '').split(',').map(origin => origin.trim()).filter(Boolean),
+    nodeEnv === 'production' ? 'https://jomworklah-two.vercel.app' : 'http://localhost:3000'
+  ])].join(',');
   return {
     rootDir,
     nodeEnv,
     port: toInt(env.PORT, 8787),
     databaseUrl: env.DATABASE_URL || '',
     dbPath: env.DB_PATH || path.join(rootDir, 'data', 'jomworklah.db'),
-    frontendOrigin: env.FRONTEND_ORIGIN || 'http://localhost:3000',
+    frontendOrigin,
     staticDir: env.STATIC_DIR ? path.resolve(rootDir, env.STATIC_DIR) : null,
     ai: {
       provider: (env.AI_PROVIDER || 'rule').toLowerCase(),
