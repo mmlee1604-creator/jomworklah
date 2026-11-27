@@ -180,6 +180,52 @@ const migrations = [
       ALTER TABLE roadmaps ADD COLUMN skill_ids_json TEXT;
       ALTER TABLE roadmaps ADD COLUMN course_ids_json TEXT;
     `
+  },
+  {
+    version: 3,
+    name: 'tvet-course-catalogue',
+    rebuildCourses: true,
+    sql: `
+      CREATE TABLE courses_new (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE RESTRICT,
+        mode TEXT CHECK (mode IN ('Online','In person','Hybrid')),
+        location TEXT NOT NULL,
+        min_weeks INTEGER CHECK (min_weeks > 0),
+        max_weeks INTEGER CHECK (max_weeks > 0 AND max_weeks >= min_weeks),
+        fee REAL,
+        is_illustrative INTEGER NOT NULL DEFAULT 1 CHECK (is_illustrative IN (0,1)),
+        source TEXT,
+        source_course_id TEXT,
+        source_url TEXT,
+        course_code TEXT,
+        description TEXT,
+        category TEXT,
+        qualification_level TEXT,
+        duration_text TEXT,
+        duration_value REAL,
+        duration_unit TEXT,
+        career_prospects TEXT,
+        entry_requirements TEXT,
+        institution_sector TEXT,
+        address TEXT,
+        scraped_at TEXT,
+        source_page INTEGER,
+        scrape_status TEXT,
+        extra_attributes_json TEXT,
+        source_data_json TEXT,
+        imported_at TEXT,
+        UNIQUE(source, source_course_id)
+      );
+      INSERT INTO courses_new(id,title,provider_id,mode,location,min_weeks,max_weeks,fee,is_illustrative)
+        SELECT id,title,provider_id,mode,location,min_weeks,max_weeks,fee,is_illustrative FROM courses;
+      DROP TABLE courses;
+      ALTER TABLE courses_new RENAME TO courses;
+      CREATE INDEX idx_courses_provider ON courses(provider_id);
+      CREATE INDEX idx_courses_mode ON courses(mode);
+      CREATE INDEX idx_courses_location ON courses(location);
+    `
   }
 ];
 
@@ -195,10 +241,21 @@ export function migrate(db) {
 
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;
-    transaction(db, () => {
-      db.exec(migration.sql);
-      db.prepare('INSERT INTO schema_migrations(version) VALUES(?)').run(migration.version);
-    });
+    // SQLite table rebuild: disable FK enforcement outside the transaction,
+    // preserve referencing tables, then check integrity before committing.
+    const foreignKeys = db.prepare('PRAGMA foreign_keys').get().foreign_keys;
+    if (migration.rebuildCourses) db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      transaction(db, () => {
+        db.exec(migration.sql);
+        if (db.prepare('PRAGMA foreign_key_check').all().length) {
+          throw new Error(`Foreign key violations in migration ${migration.version}`);
+        }
+        db.prepare('INSERT INTO schema_migrations(version) VALUES(?)').run(migration.version);
+      });
+    } finally {
+      if (migration.rebuildCourses && foreignKeys) db.exec('PRAGMA foreign_keys = ON');
+    }
   }
 
   return migrations.length;

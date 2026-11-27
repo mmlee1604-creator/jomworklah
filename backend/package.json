@@ -13,6 +13,7 @@
     "db:migrate": "node --env-file-if-exists=.env scripts/db-migrate.js",
     "db:seed": "node --env-file-if-exists=.env scripts/db-seed.js",
     "db:reset": "node --env-file-if-exists=.env scripts/db-reset.js",
+    "db:import:tvet": "node --env-file-if-exists=.env scripts/import-tvet.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {

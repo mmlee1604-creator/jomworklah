@@ -12,7 +12,7 @@
 
 [![Frontend](https://img.shields.io/badge/frontend-Next.js%2016%20·%20React%2019-e65536?style=flat-square)](frontend/)
 [![Backend](https://img.shields.io/badge/backend-Node%2024%20·%20Express%205%20·%20SQLite-087a63?style=flat-square)](backend/)
-[![Tests](https://img.shields.io/badge/tests-70%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
+[![Tests](https://img.shields.io/badge/tests-76%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
 [![AI](https://img.shields.io/badge/AI-rule%20engine%20%2B%20DeepSeek%20OCR-173c35?style=flat-square)](backend/src/ai/)
 
 > **Our mission:** to bridge the gap between education, skills development and employment in Malaysia,
@@ -222,7 +222,7 @@ QodeFest/
 │   ├── src/domain/        pure engine: scoring, roadmap, assessment, resume mapping
 │   ├── src/ai/            rule adapter · LLM adapter · DeepSeek OCR client
 │   ├── src/routes/        thin HTTP layer
-│   └── test/              70 tests, including prototype-parity assertions
+│   └── test/              76 tests, including prototype-parity assertions
 ├── slide deck/        the pitch deck (jom-kerja-lah.html)
 └── docs/screenshots/  the nine captures in section 2
 ```
@@ -317,6 +317,43 @@ These replace the old `DASHSCOPE_API_KEY` and `QWEN_*` settings. Use `?mode=live
 require real extraction; missing credentials and provider failures return errors.
 The independent `AI_*` settings still control narrative assessment and career explanations.
 The candidate browser upload remains simulated until the frontend is connected to this API.
+
+### Import TVET courses into SQLite
+
+The backend supports the scraper's 20-column `Courses` worksheet. From `backend/`:
+
+```powershell
+npm run db:import:tvet -- "C:\path\to\tvet_courses_first_1000.xlsx"
+```
+
+Reading `.xlsx` requires Python 3 (standard library only, no pip packages). If `python`
+is unavailable, append `--python "C:\path\to\python.exe"`. A JSON array with the same
+column names is also accepted and does not require Python.
+
+The importer backs up an existing database before migrating it. Imports run in one
+transaction, retain demo courses and saved user data, and update existing source IDs
+instead of creating duplicates. TVET IDs are namespaced, e.g. `tvet-7111`. Institutions
+become providers. All original cell values are retained in `courses.source_data_json`.
+
+Migration 3 adds course codes, descriptions, qualification levels, original duration
+and its unit, entry requirements, career prospects, source URLs, scrape metadata and
+extra attributes. Unknown modes, fees and week ranges remain `NULL`. Months and days
+are not converted into invented week ranges; `0 Bulan` remains a raw zero duration.
+Missing/invalid institution links are omitted as clickable URLs while preserving the
+source value. These are scraped listings, not verified current intake availability.
+
+After importing, use your session bearer token with:
+
+```text
+GET /api/training?view=all
+GET /api/training/tvet-7111
+```
+
+Imported courses can be saved using `POST /api/me/courses` with a `courseId`, then
+included in the roadmap. They initially have no `course_skills` links: explicit skill
+mapping is needed before they participate in gap-based recommendations. The frontend
+still uses its mock catalogue until API integration is implemented. Database reset
+commands remove imported rows; rerun the importer after a reset.
 
 ---
 
@@ -506,7 +543,7 @@ memory, so nothing personal is uploaded during the demo.
 cd backend && npm test
 ```
 
-**70 tests, 0 failures.** They run against real SQLite and cover behavior that could otherwise drift
+**76 tests, 0 failures.** They run against real SQLite and cover behavior that could otherwise drift
 silently:
 
 | Suite | Guards |
@@ -516,6 +553,7 @@ silently:
 | `seed.test.js` | idempotent reruns, weights sum to 1, foreign-key integrity, expected catalogue counts |
 | `api.test.js` + `parse-resume.test.js` | session bootstrap, validation and auth failures, upload type and size rejection |
 | `deepseek-ocr.test.js` | PDF/DOCX multipart OCR, structured extraction, environment settings, provider errors and incomplete output (mocked provider; no paid API calls) |
+| `import-tvet.test.js` | schema migration preserves references, imports are repeatable and atomic, missing data stays unknown, imported courses work in training and roadmaps |
 
 Parity is the point: the assertions encode the **frontend prototype's** published numbers, so the engine
 and the UI cannot quietly disagree.
@@ -552,7 +590,7 @@ Brand palette, for reference: paper `#f5f3ec`, ink `#173c35`, teal `#087a63`, ac
 
 The pitch is stronger when the numbers are trustworthy, so the boundaries are stated in the product itself.
 
-- **Every training pathway is fictional.** Provider portals are real entry points; course availability, fees, eligibility and recognition must be confirmed with the provider. The API keeps `fee = NULL` rather than inventing a price, and the UI shows "price to verify".
+- **The seeded/browser-demo training pathways are fictional.** Imported TVET listings retain their source course URLs and are marked non-illustrative, but current availability, fees, eligibility and recognition still require provider confirmation. Missing prices remain `NULL`.
 - **Compatibility weights (85/15) and requirement levels are illustrative**, chosen to be defensible rather than derived from a validated labour-market model.
 - **Holland Code is self-reported and browser-only.** The role codes are our own illustrative approximations, not an official O*NET lookup, and the 70/15/15 weighting is a design choice. The external O*NET test is English only and its result is entered by hand. The backend and employer site do not use it yet.
 - **Skills Atlas mixes real and synthetic data.** State and district geometry comes from official DOSM/open data; supply, demand, gap, employer and institution figures are synthetic and labelled "Demo data".

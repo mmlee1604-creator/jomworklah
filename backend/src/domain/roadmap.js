@@ -46,7 +46,7 @@ export function buildRoadmap({ job, scoreFor, skillNameFor, profile, courses, sa
     const course = courseById.get(courseId);
     return {
       id: `course-${courseId}`,
-      title: course ? `Explore the ${course.title} example pathway.` : `Explore the ${courseId} example pathway.`,
+      title: course ? `Explore the ${course.title}${course.isIllustrative ? ' example' : ''} pathway.` : `Explore the ${courseId} example pathway.`,
       courseId: course ? course.id : null
     };
   });
