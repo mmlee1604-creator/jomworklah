@@ -79,7 +79,7 @@ export async function openPostgresDatabase(connectionString) {
   const { Pool } = await import('pg');
   const pool = new Pool({
     connectionString,
-    ssl: { rejectUnauthorized: true },
+    ssl: { rejectUnauthorized: false },
     max: 10
   });
   pool.on('error', error => console.error('Unexpected PostgreSQL pool error:', error));
