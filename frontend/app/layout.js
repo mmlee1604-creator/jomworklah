@@ -11,10 +11,18 @@ export const viewport = {
   themeColor: "#fbf7f1",
 };
 
+const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8787/api";
+const apiBaseLiteral = JSON.stringify(apiBase).replace(/</g, "\\u003c");
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en-MY">
       <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.JKL_API_BASE = ${apiBaseLiteral};`,
+          }}
+        />
         {/* Same head assets as the static index.html so the demo renders identically. */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

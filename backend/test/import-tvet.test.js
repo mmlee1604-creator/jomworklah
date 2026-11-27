@@ -4,7 +4,8 @@ import { openDatabase } from '../src/db/connection.js';
 import { migrate, migrations } from '../src/db/migrate.js';
 import { seed } from '../src/db/seed.js';
 import { importTvetCourses } from '../src/db/import-tvet.js';
-import { loadCourse } from '../src/services/catalogue.js';
+import { loadSqliteCourse as loadCourse, loadSqliteCourses, seedSqliteCatalogue } from '../src/db/sqlite-catalogue.js';
+import { fixtureCatalogue, setCourseCatalogue } from '../src/services/course-catalogue.js';
 import { api, demoToken, makeTestApp } from './helpers.js';
 
 const row = overrides => ({
@@ -24,6 +25,7 @@ function database(t) {
   t.after(() => db.close());
   migrate(db);
   seed(db);
+  seedSqliteCatalogue(db);
   return db;
 }
 
@@ -36,6 +38,7 @@ test('migration preserves existing course links, user saves and roadmap records'
     db.prepare('INSERT INTO schema_migrations VALUES(?)').run(migration.version);
   }
   seed(db);
+  seedSqliteCatalogue(db);
   const links = db.prepare('SELECT * FROM course_skills ORDER BY course_id,skill_id').all();
   db.prepare('INSERT INTO user_courses(user_id,course_id) VALUES(?,?)').run('tpl_aina', 'sql-foundations');
   db.prepare('INSERT INTO roadmaps(user_id,target_job_id,weekly_hours,course_ids_json) VALUES(?,?,?,?)')
@@ -71,6 +74,40 @@ test('TVET import preserves source metadata without inventing mode, price or wee
   assert.deepEqual(course.extraAttributes, { 'pelaksanaan kursus': 'ST' });
   assert.deepEqual(course.skillIds, []);
   assert.deepEqual(JSON.parse(db.prepare('SELECT source_data_json FROM courses WHERE id=?').get(course.id).source_data_json), row());
+});
+
+test('upgrading local migration 3 retains saved data and allows Supabase course IDs', t => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  db.exec('CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY)');
+  db.exec('PRAGMA foreign_keys = OFF');
+  for (const migration of migrations.filter(m => m.version <= 3)) {
+    db.exec(migration.sql);
+    db.prepare('INSERT INTO schema_migrations VALUES(?)').run(migration.version);
+  }
+  db.exec('PRAGMA foreign_keys = ON');
+  seed(db);
+  seedSqliteCatalogue(db);
+  importTvetCourses(db, [row()]);
+  db.prepare('INSERT INTO user_courses(user_id,course_id) VALUES(?,?)').run('tpl_aina', 'tvet-7111');
+  migrate(db);
+  migrate(db);
+  assert.equal(db.prepare('SELECT course_id FROM user_courses').get().course_id, 'tvet-7111');
+  assert.equal(loadCourse(db, 'tvet-7111').sourceCourseId, '7111');
+  db.prepare('INSERT INTO user_courses(user_id,course_id) VALUES(?,?)').run('tpl_aina', 'supabase-only-course');
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+});
+
+test('upgrading the incoming Supabase migration 3 is also repeatable', t => {
+  const db = database(t);
+  // The incoming branch used version 3 for removing the local catalogue.
+  db.exec(`DELETE FROM schema_migrations WHERE version = 4;
+    DROP TABLE course_skills; DROP TABLE courses; DROP TABLE providers;`);
+  db.prepare('INSERT INTO user_courses(user_id,course_id) VALUES(?,?)').run('tpl_aina', 'supabase-only-course');
+  migrate(db);
+  migrate(db);
+  assert.equal(db.prepare('SELECT course_id FROM user_courses').get().course_id, 'supabase-only-course');
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
 test('repeat imports update records, deduplicate institutions and preserve saved courses and skills', t => {
@@ -113,7 +150,12 @@ test('short and zero source durations remain raw; invalid institution links are 
 test('training API lists imported courses and supports saving them into a roadmap', async t => {
   const ctx = await makeTestApp();
   t.after(() => ctx.close());
-  importTvetCourses(ctx.db, [row()]);
+  // Explicitly inject an offline import into the test cache. Production reads Supabase.
+  const local = database(t);
+  importTvetCourses(local, [row()]);
+  const fixture = fixtureCatalogue();
+  setCourseCatalogue({ ...fixture, courses: loadSqliteCourses(local) });
+  t.after(() => setCourseCatalogue(fixtureCatalogue()));
   const token = await demoToken(ctx.base, 'amir', { target: 'automotive-technician' });
   const all = await api(ctx.base, 'GET', '/api/training?view=all', { token });
   assert.equal(all.status, 200);

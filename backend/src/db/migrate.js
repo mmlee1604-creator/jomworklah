@@ -226,6 +226,21 @@ const migrations = [
       CREATE INDEX idx_courses_mode ON courses(mode);
       CREATE INDEX idx_courses_location ON courses(location);
     `
+  },
+  {
+    version: 4,
+    name: 'supabase-course-references',
+    sql: `
+      CREATE TABLE user_courses_new (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        course_id TEXT NOT NULL,
+        added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        PRIMARY KEY (user_id, course_id)
+      );
+      INSERT INTO user_courses_new SELECT user_id, course_id, added_at FROM user_courses;
+      DROP TABLE user_courses;
+      ALTER TABLE user_courses_new RENAME TO user_courses;
+    `
   }
 ];
 

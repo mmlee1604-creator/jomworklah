@@ -58,27 +58,27 @@ const modal = byId('modal');
 function loadDemo() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
-    return saved?.version === 1 ? saved : {};
+    return saved?.version === 2 ? saved : {};
   } catch {
     return {};
   }
 }
 
 function emptyJourney() {
-  return { started: false, preferences: {}, target: null, roadmap: null, added: [], completed: [] };
+  return { started: false, preferences: {}, target: null, roadmap: null, added: [], completed: [], phases: [] };
 }
 
 const saved = loadDemo();
-const journeys = Object.fromEntries(Object.keys(personas).map(id => [id, { ...emptyJourney(), ...saved.journeys?.[id] }]));
+const journeys = Object.fromEntries(Object.keys(personas).map(id => [id, emptyJourney()]));
 const state = {
   view: 'welcome',
   persona: Object.hasOwn(personas, saved.persona) ? saved.persona : 'aina',
   profiles: Object.fromEntries(Object.entries(personas).map(([id, persona]) => [id, {
-    ...persona, ...journeys[id].preferences, scores: { ...persona.scores }
+    ...persona, ...saved.extras?.[id], scores: { ...persona.scores }
   }])),
   file: null, fileError: '', processing: false, generation: false,
   skillCategory: 'All', radarSkill: null, careerSearch: '', careerCategory: 'All', careerSort: 'match',
-  training: { view: 'suggested', skill: 'All', source: 'All', mode: 'All', location: 'All', budget: 'All', sort: 'relevance' }
+  training: { view: 'suggested', skill: 'All', level: 'All', search: '', limit: 24, location: 'All', budget: 'All', sort: 'relevance' }
 };
 
 const profile = () => state.profiles[state.persona];
@@ -90,9 +90,169 @@ let toastTimeout;
 let modalTrigger;
 let reviewReturn = 'welcome';
 
+// ── Server sync: the API stores each persona's profile, target, saved courses and roadmap ──
+const tokenKey = 'jomworklah-sessions-v1';
+const hydrated = {};
+const tokens = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(tokenKey)) || {};
+  } catch {
+    return {};
+  }
+})();
+
+function saveTokens() {
+  try {
+    localStorage.setItem(tokenKey, JSON.stringify(tokens));
+  } catch {
+    // Storage can be blocked; the session then lasts until the page closes.
+  }
+}
+
+// Calls an authenticated endpoint for a persona; an expired token is forgotten.
+async function call(method, path, body, personaId = state.persona) {
+  const token = tokens[personaId];
+  try {
+    return await (method === 'get' || method === 'delete'
+      ? jklApi[method](path, { token })
+      : jklApi[method](path, body, { token }));
+  } catch (error) {
+    if (error.status === 401) {
+      delete tokens[personaId];
+      delete hydrated[personaId];
+      saveTokens();
+      error.message = 'Your demo session expired. Reload the page to start a new one.';
+    }
+    throw error;
+  }
+}
+
+async function ensureSession(personaId) {
+  if (tokens[personaId]) {
+    try {
+      return (await jklApi.get('/me', { token: tokens[personaId] })).data;
+    } catch (error) {
+      if (error.status !== 401) throw error;
+      delete tokens[personaId];
+    }
+  }
+  const { data } = await jklApi.post('/demo/session', { personaKey: personaId });
+  tokens[personaId] = data.token;
+  saveTokens();
+  return data;
+}
+
+// Copies the server's view of a user into the in-memory models the screens read.
+function applyMe(personaId, me) {
+  const server = me.profile;
+  Object.assign(state.profiles[personaId], {
+    name: server.name, qualification: server.qualification, field: server.field ?? server.fieldOfStudy,
+    experience: server.experience, projects: server.projects, location: server.location,
+    budget: server.budget, hours: server.hours ?? server.weeklyHours, mode: server.mode ?? server.learningMode,
+    interests: me.interests, scores: { ...server.scores }
+  });
+  const item = journeys[personaId];
+  const plan = me.journey.roadmap;
+  item.started = Boolean(me.journey.started);
+  item.target = me.journey.target ?? null;
+  item.added = [...me.journey.added];
+  item.completed = [...me.journey.completed];
+  item.roadmap = plan ? { hours: plan.weeklyHours ?? plan.hours, startDate: plan.startDate || '', skillIds: plan.skillIds, courseIds: plan.courseIds } : null;
+  if (!plan) item.phases = [];
+}
+
+async function loadRoadmap(personaId) {
+  const { data } = await call('get', '/me/roadmap', undefined, personaId);
+  const item = journeys[personaId];
+  item.phases = data ? data.phases : [];
+  item.completed = item.phases.flatMap(phase => phase.tasks).filter(task => task.completed).map(task => task.id);
+}
+
+async function hydratePersona(personaId) {
+  const me = await ensureSession(personaId);
+  applyMe(personaId, me);
+  if (me.journey.roadmap) await loadRoadmap(personaId);
+  hydrated[personaId] = true;
+}
+
+// ── Course catalogue (loaded from the API; Supabase is the source) ──
+const catalogue = { status: 'loading', error: '', states: [], count: 0, source: '' };
+const courseDetailCache = {};
+const levelLabels = {
+  short_course: 'Short course', certificate: 'Certificate', diploma: 'Diploma',
+  advanced_diploma: 'Advanced diploma', degree: 'Bachelor’s degree', professional: 'Professional', other: 'Other'
+};
+
+const courseIn = (course, location) => (course.locations || [course.location]).includes(location);
+const courseLevel = course => levelLabels[course.levelGroup] || '';
+const richText = text => escapeHTML(text).replace(/\n/g, '<br>');
+
+function formatWeeks(weeks) {
+  if (!weeks) return '';
+  if (weeks < 8) return weeks + (weeks === 1 ? ' week' : ' weeks');
+  const months = Math.round(weeks / 4.345);
+  if (months < 24) return 'about ' + months + ' months';
+  return 'about ' + Math.round(months / 12 * 2) / 2 + ' years';
+}
+
+function courseDuration(course) {
+  const low = formatWeeks(course.minWeeks);
+  const high = formatWeeks(course.maxWeeks);
+  return low && high && low !== high ? low + ' to ' + high : low;
+}
+
+function courseLocationText(course) {
+  const states = course.locations || [];
+  const count = (course.offerings || []).length;
+  const where = states.length > 3 ? states.slice(0, 3).join(', ') + ' +' + (states.length - 3) + ' more' : states.join(', ');
+  return (count ? 'Offered at ' + count + (count === 1 ? ' institution' : ' institutions') : 'Institutions vary') + (where ? ' · ' + where : '');
+}
+
+function courseUrl(course) {
+  return course.offerings?.[0]?.courseUrl || providers[course.provider]?.url || 'https://www.tvet.gov.my/';
+}
+
+async function loadCatalogue(redraw = false) {
+  catalogue.status = 'loading';
+  catalogue.error = '';
+  if (redraw) refreshCatalogueViews();
+  try {
+    const { data, meta } = await jklApi.get('/courses');
+    courses.splice(0, courses.length, ...data);
+    for (const key of Object.keys(providers)) delete providers[key];
+    Object.assign(providers, meta.providers);
+    for (const key of Object.keys(courseIndex)) delete courseIndex[key];
+    for (const course of courses) courseIndex[course.id] = course;
+    catalogue.states = meta.states;
+    catalogue.count = meta.count;
+    catalogue.source = meta.source;
+    dropUnknownCourses();
+    catalogue.status = 'ready';
+  } catch (error) {
+    catalogue.status = 'error';
+    catalogue.error = error.message;
+  }
+  refreshCatalogueViews();
+}
+
+// Saved courses from an earlier catalogue (e.g. the old sample courses) may no longer exist.
+function dropUnknownCourses() {
+  for (const item of Object.values(journeys)) {
+    item.added = item.added.filter(id => courseIndex[id]);
+    if (item.roadmap) item.roadmap.courseIds = (item.roadmap.courseIds || []).filter(id => courseIndex[id]);
+  }
+  persist();
+}
+
+function refreshCatalogueViews() {
+  if (['dashboard', 'upskilling', 'roadmap'].includes(state.view) && !modal.open) draw();
+}
+
 function persist() {
   try {
-    localStorage.setItem(storageKey, JSON.stringify({ version: 1, persona: state.persona, journeys }));
+    // Only browser-side choices live here. Profile, target, saved courses and roadmap are on the server.
+    const extras = Object.fromEntries(Object.entries(state.profiles).map(([id, p]) => [id, { mbti: p.mbti, holland: p.holland }]));
+    localStorage.setItem(storageKey, JSON.stringify({ version: 2, persona: state.persona, extras }));
   } catch {
     // The prototype also works in browsers that block file-origin storage.
   }
@@ -458,7 +618,7 @@ function rankedCourses(job) {
     relevance: gaps.filter(item => course.skillIds.includes(item.skillId)).reduce((sum, item) => sum + item.priority, 0)
   })).sort((a, b) => b.relevance - a.relevance
     || Number(b.mode === profile().mode) - Number(a.mode === profile().mode)
-    || Number(b.location === profile().location) - Number(a.location === profile().location)
+    || Number(courseIn(b, profile().location)) - Number(courseIn(a, profile().location))
     || a.title.localeCompare(b.title));
 }
 
@@ -578,7 +738,7 @@ function fitRing(fit) {
 }
 
 function miniCourse(course) {
-  return `<article class="mini-course"><span class="tile-icon">${icon('book', 19)}</span><div><h3>${course.title}</h3><p>${providers[course.provider].name} · ${course.mode} · Example</p></div><button type="button" class="icon-button" data-action="course" data-value="${course.id}" aria-label="View ${course.title}">${icon('arrow', 17)}</button></article>`;
+  return `<article class="mini-course"><span class="tile-icon">${icon('book', 19)}</span><div><h3>${escapeHTML(course.title)}</h3><p>${escapeHTML([courseLevel(course), courseDuration(course)].filter(Boolean).join(' · '))}</p></div><button type="button" class="icon-button" data-action="course" data-value="${escapeHTML(course.id)}" aria-label="View ${escapeHTML(course.title)}">${icon('arrow', 17)}</button></article>`;
 }
 
 function dashboardView() {
@@ -716,19 +876,21 @@ function gapView() {
 }
 
 function providerLink(course) {
-  const provider = providers[course.provider];
-  return `<a class="button button-secondary" href="${provider.url}" target="_blank" rel="noopener noreferrer">Open official platform${icon('external', 16)}<span class="sr-only"> for ${provider.name} (opens in a new tab)</span></a>`;
+  return `<a class="button button-secondary" href="${escapeHTML(courseUrl(course))}" target="_blank" rel="noopener noreferrer">View on TVET portal${icon('external', 16)}<span class="sr-only"> for ${escapeHTML(course.title)} (opens in a new tab)</span></a>`;
 }
 
 function courseCard(course) {
+  const level = courseLevel(course);
+  const fee = course.fee === 0 ? 'Tuition-free at some institutions' : 'Fee · check the institution';
+  const malay = course.titleMs && course.titleMs.toLowerCase() !== course.title.toLowerCase() ? `<p class="course-type">${escapeHTML(course.titleMs)}</p>` : '';
   return `<article class="panel course-card">
-    <div class="card-top"><span class="tile-icon">${icon('book', 22)}</span>${course.relevance ? chip('Suggested for your gap', true) : chip('Example pathway')}</div>
-    <p class="label">${providers[course.provider].name}</p><h2>${course.title}</h2><p class="course-type">Illustrative training pathway</p>
+    <div class="card-top"><span class="tile-icon">${icon('book', 22)}</span>${course.relevance ? chip('Suggested for your gap', true) : ''}</div>
+    <p class="label">${escapeHTML(level || 'TVET programme')}${course.code ? ' · ' + escapeHTML(course.code) : ''}</p><h2>${escapeHTML(course.title)}</h2>${malay}
     <div class="chips">${course.skillIds.map(id => chip(skillName(id))).join('')}</div>
     <ul class="course-facts">
-      <li>${icon('pin', 17)}${course.mode} · ${course.location === 'Online' ? 'Location independent' : course.location}</li>
-      <li>${icon('clock', 17)}Demo estimate · ${course.minWeeks}–${course.maxWeeks} weeks</li>
-      <li>${icon('info', 17)}Fee · Check provider. Eligibility · Verify with provider.</li>
+      <li>${icon('pin', 17)}${escapeHTML(courseLocationText(course))}</li>
+      <li>${icon('clock', 17)}${escapeHTML(courseDuration(course) || 'Duration varies by institution')}</li>
+      <li>${icon('info', 17)}${fee}. Check eligibility with the institution.</li>
     </ul>
     <div class="button-row">${button('View pathway', 'course', { value: course.id, style: 'secondary' })}${addCourseButton(course)}</div>
     <div>${providerLink(course)}</div>
@@ -740,34 +902,76 @@ function addCourseButton(course) {
   return button(isAdded ? 'On roadmap' : 'Add to My Roadmap', 'add-course', { value: course.id, style: isAdded ? 'secondary' : 'primary', mark: isAdded ? 'check' : 'plus', attrs: isAdded ? 'disabled' : '' });
 }
 
+function courseDetailBody(course, detail) {
+  const full = detail || course;
+  const text = (value, fallback) => value ? `<div style="max-height:240px;overflow:auto">${richText(value)}</div>` : `<p>${fallback}</p>`;
+  const offerings = (full.offerings || []).map(offering => {
+    const place = [offering.institution?.name, offering.institution?.state].filter(Boolean).join(' · ');
+    const extra = [offering.durationText, offering.feeFree ? 'Tuition free' : ''].filter(Boolean).join(' · ');
+    const address = detail && offering.institution?.address ? `<br><small>${escapeHTML(offering.institution.address.replace(/\s*\n\s*/g, ', '))}</small>` : '';
+    return `<li><strong>${escapeHTML(place || 'Institution')}</strong>${extra ? ' · ' + escapeHTML(extra) : ''}${address}${offering.courseUrl ? ` · <a href="${escapeHTML(offering.courseUrl)}" target="_blank" rel="noopener noreferrer">Listing</a>` : ''}</li>`;
+  }).join('');
+  const malay = course.titleMs && course.titleMs.toLowerCase() !== course.title.toLowerCase() ? `<p><em>${escapeHTML(course.titleMs)}</em></p>` : '';
+  return `<div class="modal-body"><p class="label">${escapeHTML([courseLevel(course), course.code].filter(Boolean).join(' · ') || 'TVET programme')}</p>${malay}
+    <h3>About this programme</h3>${detail ? text(detail.description, 'The portal does not publish a description for this programme.') : '<p>Loading details…</p>'}
+    <h3>Career prospects</h3>${detail ? text(detail.careerProspects, 'Career prospects are not published for this programme.') : '<p>Loading details…</p>'}
+    <h3>Skills addressed</h3><div class="chips">${course.skillIds.length ? course.skillIds.map(item => chip(skillName(item))).join('') : '<span>No matching skills in this demo.</span>'}</div>
+    <h3>Duration</h3><p>${escapeHTML(courseDuration(course) || 'Varies by institution')}</p>
+    <h3>Where it is offered (${(full.offerings || []).length})</h3><ul style="max-height:260px;overflow:auto;padding-left:1.1rem">${offerings || '<li>No institution listed.</li>'}</ul>
+    ${notice('Data comes from the TVET Malaysia portal. English text is machine-translated from Malay. Check intake dates, fees and eligibility with the institution.')}
+  </div><div class="modal-actions">${providerLink(course)}${addCourseButton(course)}</div>`;
+}
+
 function courseDetails(id) {
   const course = courseIndex[id];
-  openModal(course.title, `<div class="modal-body"><p class="label">Illustrative pathway · ${providers[course.provider].name}</p>
-    <p>Use this example to guide your search on the official platform. Check the provider for available courses, eligibility, fees and recognition.</p>
-    <h3>Skills addressed</h3><div class="chips">${course.skillIds.map(item => chip(skillName(item))).join('')}</div>
-    <h3>Sample format</h3><p>${course.mode} · ${course.location} · Demo estimate of ${course.minWeeks}–${course.maxWeeks} weeks.</p>
-  </div><div class="modal-actions">${providerLink(course)}${addCourseButton(course)}</div>`);
+  if (!course) return;
+  const show = detail => {
+    openModal(escapeHTML(course.title), courseDetailBody(course, detail));
+    modal.dataset.course = id;
+  };
+  show(courseDetailCache[id] || null);
+  if (courseDetailCache[id]) return;
+  jklApi.get('/courses/' + encodeURIComponent(id)).then(({ data }) => {
+    courseDetailCache[id] = data;
+    if (modal.open && modal.dataset.course === id) show(data);
+  }).catch(error => {
+    if (modal.open && modal.dataset.course === id) notify('Could not load full details: ' + error.message);
+  });
 }
 
 function filteredCourses() {
   const f = state.training;
-  const budgetLimit = [500, 1500, Infinity][budgets.indexOf(profile().budget)];
+  const query = f.search.trim().toLowerCase();
   const records = rankedCourses(targetJob() || rankedJobs()[0]).filter(item =>
     (f.view === 'all' || item.relevance > 0) &&
     (f.skill === 'All' || item.skillIds.includes(f.skill)) &&
-    (f.source === 'All' || f.source === item.provider) &&
-    (f.mode === 'All' || f.mode === item.mode) &&
-    (f.location === 'All' || f.location === item.location) &&
-    (f.budget === 'All' || (f.budget === 'verify' ? item.fee === null : item.fee !== null && item.fee <= budgetLimit))
+    (f.level === 'All' || f.level === item.levelGroup) &&
+    (f.location === 'All' || courseIn(item, f.location)) &&
+    (f.budget === 'All' || (f.budget === 'verify' ? item.fee === null : item.fee === 0)) &&
+    (!query || (item.title + ' ' + (item.titleMs || '') + ' ' + (item.code || '')).toLowerCase().includes(query))
   );
   return f.sort === 'name' ? records.sort((a, b) => a.title.localeCompare(b.title)) : records;
 }
 
 function updateTrainingResults() {
+  const box = byId('training-results');
+  const count = byId('training-count');
+  if (catalogue.status === 'loading') {
+    count.textContent = '';
+    box.innerHTML = emptyState('book', 'Loading TVET courses…', 'Fetching the catalogue from the server.');
+    return;
+  }
+  if (catalogue.status === 'error') {
+    count.textContent = '';
+    box.innerHTML = emptyState('info', 'Could not load courses', escapeHTML(catalogue.error) + ' Check that the API is running, then try again.', button('Try again', 'retry-catalogue', { style: 'secondary' }));
+    return;
+  }
   const results = filteredCourses();
-  byId('training-count').textContent = results.length + (results.length === 1 ? ' pathway' : ' pathways');
-  byId('training-results').innerHTML = results.length ? results.map(courseCard).join('') :
-    emptyState('book', 'No matching pathways', 'Try a different skill or learning mode, or browse the full example catalogue.', button('Reset and browse all', 'clear-training', { style: 'secondary' }));
+  const shown = results.slice(0, state.training.limit);
+  count.textContent = results.length + (results.length === 1 ? ' pathway' : ' pathways');
+  box.innerHTML = results.length
+    ? shown.map(courseCard).join('') + (results.length > shown.length ? `<div style="grid-column:1/-1;text-align:center">${button('Show more (' + (results.length - shown.length) + ' left)', 'more-courses', { style: 'secondary' })}</div>` : '')
+    : emptyState('book', 'No matching pathways', 'Try a different skill, state or search, or browse the full catalogue.', button('Reset and browse all', 'clear-training', { style: 'secondary' }));
 }
 
 function trainingView() {
@@ -775,54 +979,25 @@ function trainingView() {
   const role = targetJob() || rankedJobs()[0];
   const withAll = (list, heading) => [['All', heading], ...list];
   const availableSkills = [...new Set(courses.flatMap(item => item.skillIds))].sort((a, b) => skillName(a).localeCompare(skillName(b)));
-  return `${title('Upskilling hub', 'Training that closes your skills gap', 'Programme examples for ' + role.title + ', plus the full catalogue.')}
-    ${notice('The catalogue uses mock programmes. Check official providers for available courses, fees, intake dates, recognition and eligibility.')}
+  return `${title('Upskilling hub', 'Training that closes your skills gap', 'TVET programmes for ' + role.title + ', ranked by the skills you still need.')}
+    ${notice('Courses come from the TVET Malaysia portal (tvet.gov.my). This is a sample of the first 1,000 listings, and English text is machine-translated from Malay. Check intake dates, fees and eligibility with each institution.')}
     <div class="filter-chips view-filters">${[['suggested', 'Suggested for your gaps'], ['all', 'All pathways']].map(([value, label]) => button(label, 'training-view', { style: 'filter', value, attrs: `aria-pressed="${f.view === value}"` })).join('')}</div>
     <div class="panel filter-bar training-filters">
       ${selectField('skill', 'Skill', withAll(availableSkills.map(id => [id, skillName(id)]), 'All skills'), f.skill, 'data-training')}
-      ${selectField('source', 'Source', withAll(Object.entries(providers).map(([id, provider]) => [id, provider.name]), 'All sources'), f.source, 'data-training')}
-      ${selectField('mode', 'Learning mode', withAll(learningModes, 'All modes'), f.mode, 'data-training')}
-      ${selectField('location', 'Location', withAll([...new Set(courses.map(item => item.location))], 'All locations'), f.location, 'data-training')}
-      ${selectField('budget', 'Budget', [['All', 'All pathways'], ['within', 'Confirmed within ' + profile().budget], ['verify', 'Price to verify']], f.budget, 'data-training')}
+      <label class="field search-field"><span>Search programmes</span><span class="search-input">${icon('search', 17)}<input type="search" name="training-search" value="${escapeHTML(f.search)}" placeholder="e.g. welding, networking"></span></label>
+      ${selectField('level', 'Qualification type', withAll(Object.entries(levelLabels), 'All types'), f.level, 'data-training')}
+      ${selectField('location', 'State', withAll(catalogue.states.map(name => [name, name]), 'All states'), f.location, 'data-training')}
+      ${selectField('budget', 'Budget', [['All', 'All pathways'], ['within', 'Tuition confirmed free'], ['verify', 'Fee to verify']], f.budget, 'data-training')}
       ${selectField('sort', 'Sort by', [['relevance', 'Relevance'], ['name', 'Name (A–Z)']], f.sort, 'data-training')}
     </div>
     <div class="result-line"><span class="label" id="training-count" aria-live="polite"></span>${button('Browse full catalogue', 'clear-training', { style: 'plain' })}</div>
     <div class="job-grid" id="training-results"></div>`;
 }
 
-function generateSnapshot(job, hours, startDate) {
-  const positive = gapsFor(job).filter(item => item.gap);
-  return {
-    hours, startDate,
-    skillIds: positive.slice(0, 3).map(item => item.skillId),
-    courseIds: rankedCourses(job).filter(item => item.relevance && !journey().added.includes(item.id)).slice(0, 2).map(item => item.id)
-  };
-}
+// Roadmaps are built by the API (POST /me/roadmap); the screens only render what it returns.
 
 function roadmapPhases() {
-  const job = targetJob();
-  const plan = journey().roadmap;
-  if (!job || !plan) return [];
-  const task = (id, title, course = null) => ({ id, title, course });
-  const coreWeeks = [2, 3, 2, 1].map(weeks => Math.max(1, Math.ceil(weeks * 5 / plan.hours)));
-  const foundation = plan.skillIds.map(id => {
-    const practical = ['tools', 'auto', 'electrical', 'safety', 'sensors'].includes(id);
-    return task('skill-' + id, practical ? 'Review ' + skillName(id) + ' with a qualified instructor or supervisor.' : 'Study the fundamentals of ' + skillName(id) + ' and document a practice example.');
-  });
-  if (foundation.length < 2) foundation.push(task('foundation-inventory', 'Map two examples from your experience to the sample role requirements.'));
-  if (foundation.length < 2) foundation.push(task('foundation-review', 'Choose one existing skill to demonstrate more clearly in your portfolio.'));
-  const training = [...new Set([...plan.courseIds, ...journey().added])].map(id => task('course-' + id, 'Explore the ' + courseIndex[id].title + ' example pathway.', courseIndex[id]));
-  if (!training.length) training.push(task('training-review', 'Compare one official training pathway with the sample role requirements.'));
-  return [
-    { id: 'foundations', title: 'Build Foundations', goal: 'Develop the evidence you need for this role.', weeks: coreWeeks[0], tasks: foundation },
-    { id: 'training', title: 'Upskill with Training', goal: 'Check provider options and plan a realistic study schedule.', weeks: coreWeeks[1], tasks: [...training, task('training-schedule', 'Set recurring study time and record weekly practice goals.')] },
-    { id: 'projects', title: 'Build Real Projects', goal: 'Create a portfolio example you can describe in an interview.', weeks: coreWeeks[2], tasks: job.project.map((label, index) => task('project-' + (index + 1), label)) },
-    { id: 'prepare', title: 'Prepare for Jobs', goal: 'Translate your experience into an application for the target role.', weeks: coreWeeks[3], tasks: [
-      task('prepare-resume', 'Update your demo resume with evidence relevant to ' + job.title + '.'),
-      task('prepare-interview', 'Prepare two interview examples that explain your actions and results.'),
-      task('prepare-application', 'Draft a tailored application for a sample ' + job.title + ' role.')
-    ] }
-  ];
+  return targetJob() && journey().roadmap ? journey().phases : [];
 }
 
 function roadmapProgress() {
@@ -848,7 +1023,7 @@ function roadmapView() {
         <label class="field"><span>Start date (optional)</span><input type="date" name="start-date" value="${escapeHTML(plan?.startDate || '')}"></label>
         <button type="submit" class="button button-primary" ${state.generation ? 'disabled' : ''}>${plan ? 'Regenerate Roadmap' : 'Generate My Career Roadmap'}${icon('arrow', 17)}</button>
       </form>
-      <p id="generation-message" class="loading-message" role="status" ${state.generation ? '' : 'hidden'}>Demo simulation · Building your learning pathway…</p>
+      <p id="generation-message" class="loading-message" role="status" ${state.generation ? '' : 'hidden'}>Building your learning pathway…</p>
       ${!plan && journey().added.length ? `<p>${journey().added.length} saved ${journey().added.length === 1 ? 'pathway will' : 'pathways will'} be included when you generate the roadmap.</p>` : ''}
     </section>
     ${plan ? `<div class="roadmap-layout">
@@ -873,18 +1048,29 @@ function roadmapProgressMarkup(progress) {
   return `<div class="progress-amount"><strong>${progress.percent}%</strong><span>${progress.done} of ${progress.total} tasks complete</span></div>${bar(progress.percent, 100)}`;
 }
 
-function updateTask(control) {
+async function updateTask(control) {
+  const taskId = control.dataset.task;
+  const wanted = control.checked;
+  control.disabled = true;
+  try {
+    await call('patch', '/me/roadmap/tasks/' + encodeURIComponent(taskId), { completed: wanted });
+  } catch (error) {
+    control.checked = !wanted;
+    control.disabled = false;
+    notify('Could not update the task: ' + error.message);
+    return;
+  }
+  control.disabled = false;
   const completed = new Set(journey().completed);
-  if (control.checked) completed.add(control.dataset.task);
-  else completed.delete(control.dataset.task);
+  if (wanted) completed.add(taskId);
+  else completed.delete(taskId);
   journey().completed = [...completed];
-  persist();
   const progress = roadmapProgress();
   byId('roadmap-progress').innerHTML = roadmapProgressMarkup(progress);
   byId('next-action').textContent = progress.next?.title || 'All tasks in this roadmap are complete.';
   const phase = control.closest('details');
   phase.querySelector('[data-phase-count]').textContent = phase.querySelectorAll('input:checked').length + '/' + phase.querySelectorAll('input').length;
-  notify(control.checked ? 'Task marked complete.' : 'Task marked incomplete.');
+  notify(wanted ? 'Task marked complete.' : 'Task marked incomplete.');
 }
 
 function atlasView() {
@@ -904,7 +1090,7 @@ function settingsView() {
         <div class="settings-persona">${personaPhoto(state.persona, 72)}<div><strong>${escapeHTML(profile().name)}</strong><span>${type.code} · ${type.name}</span></div></div>
         <h2>Demo settings</h2>
         <dl><dt>Sample persona</dt><dd>${personas[state.persona].name}</dd><dt>MBTI personality</dt><dd>${type.code} · ${type.name} (${mbtiGroups[type.group].label})</dd><dt>Target career</dt><dd>${targetJob()?.title || 'Choose a career in Career Explorer'}</dd><dt>Selected resume</dt><dd>${state.file ? escapeHTML(state.file.name) + ' · This session only' : 'Using a sample profile'}</dd></dl>
-        ${notice('This browser can save demo preferences, target careers and roadmap tasks. File details, editable profile text and evidence scores stay in the current session.', 'lock')}
+        ${notice('Your profile, target career, saved pathways and roadmap are saved on the server for this demo session. MBTI and Holland picks stay in this browser, and the chosen resume file is never stored.', 'lock')}
         ${goButton('How scores work', 'skills', 'plain', 'info')}
         ${goButton('Upload New Resume', 'upload', 'plain', 'upload')}
         ${button('Reset Demo', 'reset-demo', { style: 'secondary' })}
@@ -952,7 +1138,15 @@ function personaPicker() {
     }).join('')}</div>`);
 }
 
-function reviewPersona(id, from, keepFile = false) {
+async function reviewPersona(id, from, keepFile = false) {
+  if (!hydrated[id]) {
+    try {
+      await hydratePersona(id);
+    } catch (error) {
+      notify('Could not reach the server: ' + error.message);
+      return;
+    }
+  }
   const changed = state.persona !== id;
   const enteringDemo = state.view === 'welcome' || state.view === 'upload';
   state.persona = id;
@@ -1013,29 +1207,41 @@ function simulateResume() {
 }
 
 function resetTraining(view = 'suggested') {
-  state.training = { view, skill: 'All', source: 'All', mode: 'All', location: 'All', budget: 'All', sort: 'relevance' };
+  state.training = { view, skill: 'All', level: 'All', search: '', limit: 24, location: 'All', budget: 'All', sort: 'relevance' };
 }
 
-function setTarget(id) {
+async function setTarget(id) {
   if (journey().target !== id) {
-    Object.assign(journey(), { target: id, roadmap: null, added: [], completed: [] });
+    try {
+      await call('put', '/me/target', { jobId: id });
+    } catch (error) {
+      notify('Could not save your target: ' + error.message);
+      return;
+    }
+    Object.assign(journey(), { target: id, roadmap: null, added: [], completed: [], phases: [] });
     state.generation = false;
   }
   resetTraining();
-  persist();
   go('gap');
   notify('Target set to ' + jobIndex[id].title + '.');
 }
 
-function addCourse(id) {
+async function addCourse(id) {
   if (!targetJob()) {
     openModal('Choose a target first', `<p class="modal-description">Select a career to build a roadmap for it, then add the training pathways you want to explore.</p><div class="modal-actions">${goButton('Explore Careers', 'careers')}</div>`);
     return;
   }
   if (journey().added.includes(id) || journey().roadmap?.courseIds.includes(id)) return;
-  journey().added.push(id);
-  persist();
   const focused = document.activeElement;
+  const personaId = state.persona;
+  try {
+    await call('post', '/me/courses', { courseId: id }, personaId);
+    journeys[personaId].added.push(id);
+    if (journeys[personaId].roadmap) await loadRoadmap(personaId);
+  } catch (error) {
+    notify('Could not save this pathway: ' + error.message);
+    return;
+  }
   if (modal.open) {
     courseDetails(id);
     if (state.view === 'upskilling') updateTrainingResults();
@@ -1044,38 +1250,42 @@ function addCourse(id) {
     const replacement = byId('training-results').querySelector(`[data-action="course"][data-value="${id}"]`);
     if (focused?.dataset?.action === 'add-course') replacement?.focus({ preventScroll: true });
   }
-  notify(journey().roadmap ? 'Example pathway added to your roadmap.' : 'Pathway saved. It will appear when you generate your roadmap.');
+  notify(journey().roadmap ? 'Pathway added to your roadmap.' : 'Pathway saved. It will appear when you generate your roadmap.');
 }
 
-function makeRoadmap(form) {
+async function makeRoadmap(form) {
   if (state.generation) return;
   const inputs = new FormData(form);
   const hours = Number(inputs.get('hours'));
   const startDate = inputs.get('start-date');
-  const activeJourney = journey();
-  const snapshot = generateSnapshot(targetJob(), hours, startDate);
+  const personaId = state.persona;
   const operation = {};
   state.generation = operation;
   form.querySelector('button[type="submit"]').disabled = true;
   byId('generation-message').hidden = false;
-  setTimeout(() => {
+  try {
+    const { data } = await call('post', '/me/roadmap', { weeklyHours: hours, startDate }, personaId);
+    const item = journeys[personaId];
+    item.roadmap = { hours, startDate: data.roadmap.startDate || '', skillIds: data.roadmap.skillIds, courseIds: data.roadmap.courseIds };
+    item.phases = data.phases;
+    item.completed = data.phases.flatMap(phase => phase.tasks).filter(task => task.completed).map(task => task.id);
+    state.profiles[personaId].hours = hours;
     if (state.generation !== operation) return;
     state.generation = false;
-    activeJourney.roadmap = snapshot;
-    profile().hours = hours;
-    activeJourney.preferences.hours = hours;
-    const taskIds = new Set(roadmapPhases().flatMap(phase => phase.tasks).map(task => task.id));
-    activeJourney.completed = activeJourney.completed.filter(id => taskIds.has(id));
-    persist();
     if (state.view === 'roadmap') {
       draw();
       byId('roadmap-form').querySelector('button[type="submit"]').focus({ preventScroll: true });
     }
-    notify('Your demo roadmap is ready.');
-  }, 900);
+    notify('Your roadmap is ready.');
+  } catch (error) {
+    if (state.generation === operation) state.generation = false;
+    if (state.view === 'roadmap') draw();
+    notify('Could not build your roadmap: ' + error.message);
+  }
 }
 
-function saveProfile(form) {
+async function saveProfile(form) {
+  if (state.saving) return;
   const input = new FormData(form);
   const preferences = Object.fromEntries(['location', 'budget', 'mode'].map(name => [name, input.get(name)]));
   preferences.hours = Number(input.get('hours'));
@@ -1090,15 +1300,49 @@ function saveProfile(form) {
     return;
   }
   const scores = Object.fromEntries(skills.map(skill => [skill.id, Number(input.get('skill-' + skill.id))]));
-  Object.assign(profile(), info, preferences, { scores });
-  Object.assign(journey(), { started: true, preferences });
+  const personaId = state.persona;
+  state.saving = true;
+  try {
+    const { data } = await call('put', '/me/onboarding', {
+      ...info, location: preferences.location, budget: preferences.budget, mode: preferences.mode,
+      hours: preferences.hours, interests: preferences.interests, scores
+    }, personaId);
+    applyMe(personaId, data);
+  } catch (error) {
+    notify('Could not save your profile: ' + error.message);
+    return;
+  } finally {
+    state.saving = false;
+  }
+  Object.assign(state.profiles[personaId], { mbti: preferences.mbti, holland: preferences.holland });
   state.reviewPending = false;
   persist();
   if (state.view === 'profile-review') go('dashboard');
-  notify('Demo profile saved.');
+  notify('Profile saved.');
 }
 
-function resetDemo(all) {
+async function resetDemo(all) {
+  const failures = [];
+  for (const id of Object.keys(personas)) {
+    if (!tokens[id]) continue;
+    try {
+      await (all ? jklApi.delete('/me', { token: tokens[id] }) : jklApi.delete('/me/journey', { token: tokens[id] }));
+    } catch (error) {
+      if (error.status !== 401) failures.push(error.message);
+    }
+  }
+  if (failures.length) {
+    modal.close();
+    notify('Could not reset the demo on the server: ' + failures[0]);
+    return;
+  }
+  if (all) {
+    for (const id of Object.keys(personas)) {
+      delete tokens[id];
+      delete hydrated[id];
+    }
+    saveTokens();
+  }
   try {
     localStorage.removeItem(storageKey);
   } catch {
@@ -1158,10 +1402,16 @@ const actions = {
   },
   'process-resume': simulateResume,
   'sample-resume': () => reviewPersona('aina', 'upload'),
-  'sample-reset'() {
+  async 'sample-reset'() {
+    try {
+      const { data } = await call('post', '/me/profile/sample-reset');
+      applyMe(state.persona, data);
+    } catch (error) {
+      notify('Could not restore the sample profile: ' + error.message);
+      return;
+    }
     const sample = personas[state.persona];
-    state.profiles[state.persona] = { ...sample, scores: { ...sample.scores } };
-    journey().preferences = {};
+    Object.assign(profile(), { mbti: sample.mbti, holland: sample.holland });
     persist();
     draw();
     main.querySelector('[data-action="sample-reset"]').focus({ preventScroll: true });
@@ -1226,6 +1476,7 @@ const actions = {
   },
   'training-view'(value) {
     state.training.view = value;
+    state.training.limit = 24;
     draw();
     main.querySelector('[data-action="training-view"][aria-pressed="true"]').focus({ preventScroll: true });
   },
@@ -1234,12 +1485,26 @@ const actions = {
     draw();
     main.querySelector('[data-action="training-view"][aria-pressed="true"]').focus({ preventScroll: true });
   },
+  'retry-catalogue'() {
+    loadCatalogue(true);
+  },
+  'more-courses'() {
+    state.training.limit += 24;
+    updateTrainingResults();
+  },
   course: courseDetails,
   'add-course': addCourse,
   'reset-roadmap'() {
     confirmation('Reset roadmap progress?', 'All tasks in this plan will become incomplete. Your target, schedule and learning pathways will stay in place.', 'confirm-reset-roadmap', '', 'Reset progress');
   },
-  'confirm-reset-roadmap'() {
+  async 'confirm-reset-roadmap'() {
+    try {
+      await call('post', '/me/roadmap/reset-progress');
+    } catch (error) {
+      modal.close();
+      notify('Could not reset progress: ' + error.message);
+      return;
+    }
     journey().completed = [];
     persist();
     modal.close();
@@ -1269,6 +1534,11 @@ document.addEventListener('input', event => {
     state.careerSearch = event.target.value;
     updateCareerResults();
   }
+  if (event.target.name === 'training-search') {
+    state.training.search = event.target.value;
+    state.training.limit = 24;
+    updateTrainingResults();
+  }
   if (event.target.name === 'name') event.target.setCustomValidity('');
 });
 
@@ -1286,6 +1556,7 @@ document.addEventListener('change', event => {
   }
   if (field.hasAttribute('data-training')) {
     state.training[field.name] = field.value;
+    state.training.limit = 24;
     updateTrainingResults();
   }
   if (field.hasAttribute('data-evidence')) profile().scores[field.name.slice(6)] = Number(field.value);
@@ -1340,4 +1611,18 @@ window.addEventListener('popstate', () => {
   const next = validView(location.hash.slice(1));
   if (next !== state.view) showView(next);
 });
-showView(location.hash.slice(1), false);
+// Landing needs no data; a deep link waits for the server copy of the persona so it can route correctly.
+async function boot() {
+  const wanted = location.hash.slice(1);
+  if (wanted && wanted !== 'welcome') {
+    main.innerHTML = '<p class="loading-message" role="status" style="padding:2rem">Loading your workspace…</p>';
+    try {
+      await hydratePersona(state.persona);
+    } catch (error) {
+      notify('Could not reach the server: ' + error.message);
+    }
+  }
+  showView(wanted, false);
+  loadCatalogue();
+}
+boot();

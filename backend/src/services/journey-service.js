@@ -13,79 +13,84 @@ import {
   toProfile
 } from './catalogue.js';
 
-export function getJourney(db, userId) {
-  const row = db.prepare('SELECT * FROM journeys WHERE user_id = ?').get(userId);
+export async function getJourney(db, userId) {
+  const row = await db.prepare('SELECT * FROM journeys WHERE user_id = ?').get(userId);
   return { started: Boolean(row?.started), targetJobId: row?.target_job_id ?? null };
 }
 
-export function setTarget(db, userId, jobId) {
-  const job = loadJob(db, jobId);
+export async function setTarget(db, userId, jobId) {
+  const job = await loadJob(db, jobId);
   if (!job) throw new AppError(404, 'CAREER_NOT_FOUND', `Unknown career '${jobId}'.`);
 
-  const existing = db.prepare('SELECT target_job_id FROM journeys WHERE user_id = ?').get(userId);
+  const existing = await db.prepare('SELECT target_job_id FROM journeys WHERE user_id = ?').get(userId);
   const changed = !existing || existing.target_job_id !== jobId;
 
-  transaction(db, () => {
-    db.prepare(`
+  await transaction(db, async tx => {
+    await tx.prepare(`
       INSERT INTO journeys(user_id, started, target_job_id) VALUES(?, 1, ?)
       ON CONFLICT(user_id) DO UPDATE SET started = 1, target_job_id = excluded.target_job_id,
-        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        updated_at = CURRENT_TIMESTAMP
     `).run(userId, jobId);
 
     if (changed) {
-      db.prepare('DELETE FROM roadmaps WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM task_completions WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM user_courses WHERE user_id = ?').run(userId);
+      await tx.prepare('DELETE FROM roadmaps WHERE user_id = ?').run(userId);
+      await tx.prepare('DELETE FROM task_completions WHERE user_id = ?').run(userId);
+      await tx.prepare('DELETE FROM user_courses WHERE user_id = ?').run(userId);
     }
   });
 
-  return { journey: getJourneyState(db, userId), targetJobId: jobId, invalidated: changed, targetTitle: job.title };
+  return { journey: await getJourneyState(db, userId), targetJobId: jobId, invalidated: changed, targetTitle: job.title };
 }
 
-export function listSavedCourseIds(db, userId) {
-  return db.prepare(`
+export async function listSavedCourseIds(db, userId) {
+  return (await db.prepare(`
     SELECT course_id FROM user_courses WHERE user_id = ? ORDER BY added_at
-  `).all(userId).map(row => row.course_id);
+  `).all(userId)).map(row => row.course_id);
 }
 
-export function listSavedCourses(db, userId) {
-  const saved = new Set(listSavedCourseIds(db, userId));
+export async function listSavedCourses(db, userId) {
+  const saved = new Set(await listSavedCourseIds(db, userId));
   return loadCourses(db).filter(course => saved.has(course.id)).map(courseView);
 }
 
-export function addCourse(db, userId, courseId) {
-  const course = loadCourse(db, courseId);
+export async function addCourse(db, userId, courseId) {
+  const course = await loadCourse(db, courseId);
   if (!course) throw new AppError(404, 'COURSE_NOT_FOUND', `Unknown course '${courseId}'.`);
-  if (!getJourney(db, userId).targetJobId) {
+  if (!(await getJourney(db, userId)).targetJobId) {
     throw new AppError(409, 'TARGET_REQUIRED', 'Choose a target career before adding training pathways.');
   }
-  const roadmapRow = db.prepare('SELECT course_ids_json FROM roadmaps WHERE user_id = ?').get(userId);
+  const roadmapRow = await db.prepare('SELECT course_ids_json FROM roadmaps WHERE user_id = ?').get(userId);
   if (parseIds(roadmapRow?.course_ids_json)?.includes(courseId)) {
     throw new AppError(409, 'COURSE_ALREADY_SAVED', `Course '${courseId}' is already in your roadmap.`);
   }
 
-  const result = db.prepare('INSERT OR IGNORE INTO user_courses(user_id, course_id) VALUES(?, ?)').run(userId, courseId);
+  const result = await db.prepare('INSERT INTO user_courses(user_id, course_id) VALUES(?, ?) ON CONFLICT DO NOTHING')
+    .run(userId, courseId);
   if (result.changes === 0) {
     throw new AppError(409, 'COURSE_ALREADY_SAVED', `Course '${courseId}' is already saved.`);
   }
   return courseView(course);
 }
 
-export function removeCourse(db, userId, courseId) {
-  if (!loadCourse(db, courseId)) throw new AppError(404, 'COURSE_NOT_FOUND', `Unknown course '${courseId}'.`);
-  db.prepare('DELETE FROM user_courses WHERE user_id = ? AND course_id = ?').run(userId, courseId);
+export async function removeCourse(db, userId, courseId) {
+  if (!await loadCourse(db, courseId)) throw new AppError(404, 'COURSE_NOT_FOUND', `Unknown course '${courseId}'.`);
+  await db.prepare('DELETE FROM user_courses WHERE user_id = ? AND course_id = ?').run(userId, courseId);
 }
 
-function roadmapContext(db, userId, job) {
-  const scores = loadScoreMap(db, userId);
-  const skillMap = loadSkillMap(db);
+async function roadmapContext(db, userId, job) {
+  const [scores, skillMap, profileRow, savedCourseIds] = await Promise.all([
+    loadScoreMap(db, userId),
+    loadSkillMap(db),
+    loadProfileRow(db, userId),
+    listSavedCourseIds(db, userId)
+  ]);
   return {
     job,
     scoreFor: skillId => scores[skillId] ?? 0,
     skillNameFor: skillId => skillMap.get(skillId)?.name ?? skillId,
-    profile: toProfile(loadProfileRow(db, userId)),
+    profile: toProfile(profileRow),
     courses: loadCourses(db),
-    savedCourseIds: listSavedCourseIds(db, userId)
+    savedCourseIds
   };
 }
 
@@ -98,43 +103,43 @@ function parseIds(json) {
   }
 }
 
-function storedSnapshot(db, userId, row, context) {
+async function storedSnapshot(db, userId, row, context) {
   const skillIds = parseIds(row.skill_ids_json);
   const courseIds = parseIds(row.course_ids_json);
   if (skillIds && courseIds) return { skillIds, courseIds };
 
   // Rows generated before snapshots existed are frozen on first read.
   const snapshot = deriveRoadmapInputs(context);
-  db.prepare('UPDATE roadmaps SET skill_ids_json = ?, course_ids_json = ? WHERE user_id = ?')
+  await db.prepare('UPDATE roadmaps SET skill_ids_json = ?, course_ids_json = ? WHERE user_id = ?')
     .run(JSON.stringify(snapshot.skillIds), JSON.stringify(snapshot.courseIds), userId);
   return snapshot;
 }
 
-function pruneCompletions(db, userId, taskIds) {
+async function pruneCompletions(db, userId, taskIds) {
   if (!taskIds.length) {
-    db.prepare('DELETE FROM task_completions WHERE user_id = ?').run(userId);
+    await db.prepare('DELETE FROM task_completions WHERE user_id = ?').run(userId);
     return;
   }
   const placeholders = taskIds.map(() => '?').join(',');
-  db.prepare(`DELETE FROM task_completions WHERE user_id = ? AND task_id NOT IN (${placeholders})`)
+  await db.prepare(`DELETE FROM task_completions WHERE user_id = ? AND task_id NOT IN (${placeholders})`)
     .run(userId, ...taskIds);
 }
 
-export function getRoadmap(db, userId) {
-  const row = db.prepare('SELECT * FROM roadmaps WHERE user_id = ?').get(userId);
+export async function getRoadmap(db, userId) {
+  const row = await db.prepare('SELECT * FROM roadmaps WHERE user_id = ?').get(userId);
   if (!row) return null;
 
-  const job = loadJob(db, row.target_job_id);
+  const job = await loadJob(db, row.target_job_id);
   if (!job) return null;
 
-  const context = roadmapContext(db, userId, job);
-  const snapshot = storedSnapshot(db, userId, row, context);
+  const context = await roadmapContext(db, userId, job);
+  const snapshot = await storedSnapshot(db, userId, row, context);
   const phases = buildRoadmap({ ...context, weeklyHours: row.weekly_hours, snapshot });
   const taskIds = flattenTasks(phases).map(task => task.id);
-  pruneCompletions(db, userId, taskIds);
+  await pruneCompletions(db, userId, taskIds);
 
   const completed = new Set(
-    db.prepare('SELECT task_id FROM task_completions WHERE user_id = ?').all(userId).map(task => task.task_id)
+    (await db.prepare('SELECT task_id FROM task_completions WHERE user_id = ?').all(userId)).map(task => task.task_id)
   );
   const courseById = new Map(context.courses.map(course => [course.id, course]));
   const shapedPhases = phasesView(withCompletion(phases, completed), courseById);
@@ -154,52 +159,59 @@ export function getRoadmap(db, userId) {
   };
 }
 
-export function getJourneyState(db, userId, roadmapState = getRoadmap(db, userId)) {
+export async function getJourneyState(db, userId, roadmapState) {
+  const resolvedRoadmap = roadmapState === undefined ? await getRoadmap(db, userId) : roadmapState;
+  const [journey, profileRow, interests, added] = await Promise.all([
+    getJourney(db, userId),
+    loadProfileRow(db, userId),
+    loadInterestIds(db, userId),
+    listSavedCourseIds(db, userId)
+  ]);
   return journeyView({
-    journey: getJourney(db, userId),
-    profile: toProfile(loadProfileRow(db, userId)),
-    interests: loadInterestIds(db, userId),
-    roadmap: roadmapState?.roadmap ?? null,
-    added: listSavedCourseIds(db, userId),
-    completed: roadmapState ? flattenTasks(roadmapState.phases).filter(task => task.completed).map(task => task.id) : []
+    journey,
+    profile: toProfile(profileRow),
+    interests,
+    roadmap: resolvedRoadmap?.roadmap ?? null,
+    added,
+    completed: resolvedRoadmap ? flattenTasks(resolvedRoadmap.phases).filter(task => task.completed).map(task => task.id) : []
   });
 }
 
-export function generateRoadmap(db, userId, { weeklyHours, startDate = null }) {
-  const journey = getJourney(db, userId);
+export async function generateRoadmap(db, userId, { weeklyHours, startDate = null }) {
+  const journey = await getJourney(db, userId);
   if (!journey.targetJobId) {
     throw new AppError(409, 'TARGET_REQUIRED', 'Choose a target career before generating a roadmap.');
   }
 
-  const job = loadJob(db, journey.targetJobId);
+  const job = await loadJob(db, journey.targetJobId);
   if (!job) throw new AppError(409, 'TARGET_REQUIRED', 'Your target career is no longer available.');
 
-  const context = roadmapContext(db, userId, job);
+  const context = await roadmapContext(db, userId, job);
   const snapshot = deriveRoadmapInputs(context);
   const phases = buildRoadmap({ ...context, weeklyHours, snapshot });
   const taskIds = flattenTasks(phases).map(task => task.id);
 
-  transaction(db, () => {
-    db.prepare(`
+  await transaction(db, async tx => {
+    await tx.prepare(`
       INSERT INTO roadmaps(user_id, target_job_id, weekly_hours, start_date, skill_ids_json, course_ids_json)
       VALUES(?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET target_job_id = excluded.target_job_id,
         weekly_hours = excluded.weekly_hours, start_date = excluded.start_date,
         skill_ids_json = excluded.skill_ids_json, course_ids_json = excluded.course_ids_json,
-        generated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        generated_at = CURRENT_TIMESTAMP
     `).run(userId, job.id, weeklyHours, startDate, JSON.stringify(snapshot.skillIds), JSON.stringify(snapshot.courseIds));
 
-    db.prepare("UPDATE profiles SET weekly_hours = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?")
+    await tx.prepare('UPDATE profiles SET weekly_hours = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
       .run(weeklyHours, userId);
 
-    pruneCompletions(db, userId, taskIds);
+    await pruneCompletions(tx, userId, taskIds);
   });
 
   return getRoadmap(db, userId);
 }
 
-export function setTaskCompletion(db, userId, taskId, completed) {
-  const state = getRoadmap(db, userId);
+export async function setTaskCompletion(db, userId, taskId, completed) {
+  const state = await getRoadmap(db, userId);
   if (!state) {
     throw new AppError(409, 'ROADMAP_REQUIRED', 'Generate a roadmap before updating tasks.');
   }
@@ -210,36 +222,37 @@ export function setTaskCompletion(db, userId, taskId, completed) {
   }
 
   if (completed) {
-    db.prepare('INSERT OR IGNORE INTO task_completions(user_id, task_id) VALUES(?, ?)').run(userId, taskId);
+    await db.prepare('INSERT INTO task_completions(user_id, task_id) VALUES(?, ?) ON CONFLICT DO NOTHING')
+      .run(userId, taskId);
   } else {
-    db.prepare('DELETE FROM task_completions WHERE user_id = ? AND task_id = ?').run(userId, taskId);
+    await db.prepare('DELETE FROM task_completions WHERE user_id = ? AND task_id = ?').run(userId, taskId);
   }
 
-  const refreshed = getRoadmap(db, userId);
+  const refreshed = await getRoadmap(db, userId);
   return { taskId, completed, progress: refreshed.progress };
 }
 
-export function resetProgress(db, userId) {
-  const state = getRoadmap(db, userId);
+export async function resetProgress(db, userId) {
+  const state = await getRoadmap(db, userId);
   if (!state) {
     throw new AppError(409, 'ROADMAP_REQUIRED', 'Generate a roadmap before resetting progress.');
   }
-  db.prepare('DELETE FROM task_completions WHERE user_id = ?').run(userId);
-  return getRoadmap(db, userId).progress;
+  await db.prepare('DELETE FROM task_completions WHERE user_id = ?').run(userId);
+  return (await getRoadmap(db, userId)).progress;
 }
 
-export function clearJourney(db, userId) {
-  transaction(db, () => {
-    db.prepare("UPDATE journeys SET target_job_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?")
+export async function clearJourney(db, userId) {
+  await transaction(db, async tx => {
+    await tx.prepare('UPDATE journeys SET target_job_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
       .run(userId);
-    db.prepare('DELETE FROM roadmaps WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM task_completions WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM user_courses WHERE user_id = ?').run(userId);
+    await tx.prepare('DELETE FROM roadmaps WHERE user_id = ?').run(userId);
+    await tx.prepare('DELETE FROM task_completions WHERE user_id = ?').run(userId);
+    await tx.prepare('DELETE FROM user_courses WHERE user_id = ?').run(userId);
   });
   return getJourney(db, userId);
 }
 
-export function deleteUser(db, userId) {
-  const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+export async function deleteUser(db, userId) {
+  const result = await db.prepare('DELETE FROM users WHERE id = ?').run(userId);
   if (result.changes === 0) throw new AppError(404, 'USER_NOT_FOUND', 'User not found.');
 }

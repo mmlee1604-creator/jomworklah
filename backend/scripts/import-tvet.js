@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.js';
 import { openDatabase, closeDatabase } from '../src/db/connection.js';
 import { migrate } from '../src/db/migrate.js';
 import { seed } from '../src/db/seed.js';
+import { seedSqliteCatalogue } from '../src/db/sqlite-catalogue.js';
 import { importTvetCourses, normalizeTvetRow } from '../src/db/import-tvet.js';
 
 const args = process.argv.slice(2);
@@ -34,8 +35,12 @@ try {
     console.log(`Database backup: ${destination}`);
   }
   migrate(db);
+  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='courses'").get()) {
+    throw new Error('This SQLite database uses the Supabase catalogue. Set DB_PATH to a new SQLite file for offline imports; use scripts/import-courses.mjs for live Supabase data.');
+  }
   // Existing user/template data is left intact. Seed only a new catalogue.
   if (!db.prepare('SELECT COUNT(*) AS n FROM skills').get().n) seed(db);
+  if (!db.prepare('SELECT COUNT(*) AS n FROM courses').get().n) seedSqliteCatalogue(db);
   console.log(JSON.stringify(importTvetCourses(db, rows), null, 2));
 } finally {
   closeDatabase(db);

@@ -24,48 +24,48 @@ import {
 export function roadmapRouter() {
   const router = Router();
 
-  router.put('/me/target', validateBody(targetSchema), (req, res) => {
-    res.json({ data: setTarget(req.app.locals.db, req.user.id, req.body.jobId) });
+  router.put('/me/target', validateBody(targetSchema), async (req, res) => {
+    res.json({ data: await setTarget(req.app.locals.db, req.user.id, req.body.jobId) });
   });
 
-  router.get('/me/courses', (req, res) => {
-    const courses = listSavedCourses(req.app.locals.db, req.user.id);
+  router.get('/me/courses', async (req, res) => {
+    const courses = await listSavedCourses(req.app.locals.db, req.user.id);
     res.json({ data: courses, meta: { count: courses.length } });
   });
 
-  router.post('/me/courses', validateBody(courseSaveSchema), (req, res) => {
-    res.status(201).json({ data: addCourse(req.app.locals.db, req.user.id, req.body.courseId) });
+  router.post('/me/courses', validateBody(courseSaveSchema), async (req, res) => {
+    res.status(201).json({ data: await addCourse(req.app.locals.db, req.user.id, req.body.courseId) });
   });
 
-  router.delete('/me/courses/:courseId', validateParams(paramsCourseSchema), (req, res) => {
-    removeCourse(req.app.locals.db, req.user.id, req.params.courseId);
+  router.delete('/me/courses/:courseId', validateParams(paramsCourseSchema), async (req, res) => {
+    await removeCourse(req.app.locals.db, req.user.id, req.params.courseId);
     res.status(204).end();
   });
 
-  router.get('/me/roadmap', (req, res) => {
-    res.json({ data: getRoadmap(req.app.locals.db, req.user.id) });
+  router.get('/me/roadmap', async (req, res) => {
+    res.json({ data: await getRoadmap(req.app.locals.db, req.user.id) });
   });
 
-  router.post('/me/roadmap', validateBody(roadmapGenerateSchema), (req, res) => {
-    const state = generateRoadmap(req.app.locals.db, req.user.id, req.body);
+  router.post('/me/roadmap', validateBody(roadmapGenerateSchema), async (req, res) => {
+    const state = await generateRoadmap(req.app.locals.db, req.user.id, req.body);
     res.status(201).json({ data: state });
   });
 
-  router.patch('/me/roadmap/tasks/:taskId', validateParams(paramsTaskSchema), validateBody(taskPatchSchema), (req, res) => {
-    res.json({ data: setTaskCompletion(req.app.locals.db, req.user.id, req.params.taskId, req.body.completed) });
+  router.patch('/me/roadmap/tasks/:taskId', validateParams(paramsTaskSchema), validateBody(taskPatchSchema), async (req, res) => {
+    res.json({ data: await setTaskCompletion(req.app.locals.db, req.user.id, req.params.taskId, req.body.completed) });
   });
 
-  router.post('/me/roadmap/reset-progress', (req, res) => {
-    res.json({ data: resetProgress(req.app.locals.db, req.user.id) });
+  router.post('/me/roadmap/reset-progress', async (req, res) => {
+    res.json({ data: await resetProgress(req.app.locals.db, req.user.id) });
   });
 
-  router.delete('/me/journey', (req, res) => {
-    clearJourney(req.app.locals.db, req.user.id);
+  router.delete('/me/journey', async (req, res) => {
+    await clearJourney(req.app.locals.db, req.user.id);
     res.status(204).end();
   });
 
-  router.delete('/me', (req, res) => {
-    deleteUser(req.app.locals.db, req.user.id);
+  router.delete('/me', async (req, res) => {
+    await deleteUser(req.app.locals.db, req.user.id);
     res.status(204).end();
   });
 

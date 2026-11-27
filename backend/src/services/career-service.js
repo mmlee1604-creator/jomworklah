@@ -11,11 +11,13 @@ import {
   toProfile
 } from './catalogue.js';
 
-function context(db, userId) {
-  const scores = loadScoreMap(db, userId);
-  const interests = loadInterestIds(db, userId);
-  const skillMap = loadSkillMap(db);
-  const profileRow = loadProfileRow(db, userId);
+async function context(db, userId) {
+  const [scores, interests, skillMap, profileRow] = await Promise.all([
+    loadScoreMap(db, userId),
+    loadInterestIds(db, userId),
+    loadSkillMap(db),
+    loadProfileRow(db, userId)
+  ]);
   return {
     scores,
     interests,
@@ -25,10 +27,10 @@ function context(db, userId) {
   };
 }
 
-export function listCareers(db, userId, { query = '', category = 'All', sort = 'match' } = {}) {
-  const { interests, scoreFor, skillNameFor } = context(db, userId);
+export async function listCareers(db, userId, { query = '', category = 'All', sort = 'match' } = {}) {
+  const { interests, scoreFor, skillNameFor } = await context(db, userId);
 
-  let ranked = rankedCareers(loadJobs(db), scoreFor, interests);
+  let ranked = rankedCareers(await loadJobs(db), scoreFor, interests);
   const search = String(query).trim().toLowerCase();
   ranked = ranked.filter(job => (category === 'All' || job.category === category)
     && job.title.toLowerCase().includes(search));
@@ -53,8 +55,8 @@ export function listCareers(db, userId, { query = '', category = 'All', sort = '
 }
 
 export async function getCareer(db, userId, jobId, ai) {
-  const { interests, profile, scoreFor, skillNameFor } = context(db, userId);
-  const job = loadJob(db, jobId);
+  const { interests, profile, scoreFor, skillNameFor } = await context(db, userId);
+  const job = await loadJob(db, jobId);
   if (!job) throw new AppError(404, 'CAREER_NOT_FOUND', `Unknown career '${jobId}'.`);
 
   const compatibilityResult = compatibility(job.requirements, job.tags, scoreFor, interests);

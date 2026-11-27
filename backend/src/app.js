@@ -16,6 +16,7 @@ import { trainingRouter } from './routes/training.js';
 import { roadmapRouter } from './routes/roadmap.js';
 import { aiRouter } from './routes/ai.js';
 import { parseResumeRouter } from './routes/parse-resume.js';
+import { catalogueInfo } from './services/course-catalogue.js';
 
 function cors(config) {
   const allowed = String(config.frontendOrigin || '').split(',').map(origin => origin.trim()).filter(Boolean);
@@ -73,10 +74,10 @@ export function createApp({
 
   if (config.rateLimit.enabled) app.use(rateLimiter(config.rateLimit));
 
-  const health = (req, res, next) => {
+  const health = async (req, res, next) => {
     try {
-      req.app.locals.db.prepare('SELECT 1 AS ok').get();
-      res.json({ data: { status: 'ok', db: 'ok' } });
+      await req.app.locals.db.prepare('SELECT 1 AS ok').get();
+      res.json({ data: { status: 'ok', db: 'ok', catalogue: catalogueInfo() } });
     } catch (error) {
       next(error);
     }

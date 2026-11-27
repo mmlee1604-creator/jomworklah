@@ -1,12 +1,19 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../src/config.js';
-import { closeDatabase, openDatabase } from '../src/db/connection.js';
-import { migrate } from '../src/db/migrate.js';
+import { closeDatabase, openPostgresDatabase } from '../src/db/connection.js';
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = loadConfig();
-const db = openDatabase(config.dbPath);
+const db = await openPostgresDatabase(config.databaseUrl);
+
 try {
-  migrate(db);
-  console.log(`Migrations applied to ${config.dbPath}`);
+  for (const file of ['schema.sql', 'app-schema.sql']) {
+    const sql = await fs.readFile(path.join(root, 'supabase', file), 'utf8');
+    await db.exec(sql);
+    console.log(`Applied Supabase SQL: ${file}`);
+  }
 } finally {
-  closeDatabase(db);
+  await closeDatabase(db);
 }

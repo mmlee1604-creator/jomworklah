@@ -1,13 +1,12 @@
 import { transaction } from './connection.js';
-import { courses, interests, jobs, personas, providers, skills } from './seed-data.js';
+import { interests, jobs, personas, skills } from './seed-data.js';
 import { validateSeedData } from './validate-seed.js';
 
 const templateUserId = personaKey => `tpl_${personaKey}`;
 
 const tables = [
   'task_completions', 'roadmaps', 'user_courses', 'journeys', 'profile_interests',
-  'profile_skills', 'profiles', 'sessions', 'users', 'course_skills', 'courses',
-  'providers', 'job_projects', 'job_progression', 'job_responsibilities', 'job_tags',
+  'profile_skills', 'profiles', 'sessions', 'users', 'job_projects', 'job_progression', 'job_responsibilities', 'job_tags',
   'job_requirements', 'jobs', 'interests', 'skills'
 ];
 
@@ -28,9 +27,6 @@ export function seed(db) {
 
     const insertInterest = db.prepare('INSERT OR IGNORE INTO interests(id, label) VALUES(?, ?)');
     for (const interest of interests) insertInterest.run(interest.id, interest.label);
-
-    const insertProvider = db.prepare('INSERT OR IGNORE INTO providers(id, name, url) VALUES(?, ?, ?)');
-    for (const provider of providers) insertProvider.run(provider.id, provider.name, provider.url);
 
     const insertJob = db.prepare(`
       INSERT OR IGNORE INTO jobs(id, title, category, sector, icon, summary, qualification)
@@ -59,16 +55,6 @@ export function seed(db) {
       job.project.forEach((brief, position) => insertProject.run(job.id, position, brief));
     }
 
-    const insertCourse = db.prepare(`
-      INSERT OR IGNORE INTO courses(id, title, provider_id, mode, location, min_weeks, max_weeks, fee, is_illustrative)
-      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertCourseSkill = db.prepare('INSERT OR IGNORE INTO course_skills(course_id, skill_id) VALUES(?, ?)');
-    for (const course of courses) {
-      insertCourse.run(course.id, course.title, course.providerId, course.mode, course.location, course.minWeeks, course.maxWeeks, course.fee, course.isIllustrative ? 1 : 0);
-      course.skillIds.forEach(skillId => insertCourseSkill.run(course.id, skillId));
-    }
-
     seedPersonaTemplates(db);
   });
 
@@ -76,8 +62,6 @@ export function seed(db) {
     skills: db.prepare('SELECT COUNT(*) AS n FROM skills').get().n,
     interests: db.prepare('SELECT COUNT(*) AS n FROM interests').get().n,
     jobs: db.prepare('SELECT COUNT(*) AS n FROM jobs').get().n,
-    providers: db.prepare('SELECT COUNT(*) AS n FROM providers').get().n,
-    courses: db.prepare('SELECT COUNT(*) AS n FROM courses').get().n,
     personas: db.prepare("SELECT COUNT(*) AS n FROM users WHERE kind='demo_template'").get().n
   };
 }

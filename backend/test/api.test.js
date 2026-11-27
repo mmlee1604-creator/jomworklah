@@ -8,7 +8,10 @@ test('health and public catalogue are available without auth', async t => {
 
   const health = await api(ctx.base, 'GET', '/api/health');
   assert.equal(health.status, 200);
-  assert.deepEqual(health.body.data, { status: 'ok', db: 'ok' });
+  assert.equal(health.body.data.status, 'ok');
+  assert.equal(health.body.data.db, 'ok');
+  assert.equal(health.body.data.catalogue.source, 'fixture');
+  assert.equal(health.body.data.catalogue.courses, 10);
 
   const skills = await api(ctx.base, 'GET', '/api/skills');
   assert.equal(skills.status, 200);

@@ -34,16 +34,18 @@ async function extractWithDeepSeek(deepseek, file) {
   }
 }
 
-function applyExtraction(db, userId, resume, persist) {
+async function applyExtraction(db, userId, resume, persist) {
   const profilePatch = mapResumeToProfile(resume);
-  const mapping = mapResumeToSkills(resume, loadSkillList(db));
+  const mapping = mapResumeToSkills(resume, await loadSkillList(db));
 
-  const profile = persist && Object.keys(profilePatch).length
-    ? updateProfile(db, userId, profilePatch)
-    : getProfile(db, userId);
-  const skills = persist && Object.keys(mapping.scores).length
-    ? setSkills(db, userId, mapping.scores)
-    : getSkills(db, userId);
+  const [profile, skills] = await Promise.all([
+    persist && Object.keys(profilePatch).length
+      ? updateProfile(db, userId, profilePatch)
+      : getProfile(db, userId),
+    persist && Object.keys(mapping.scores).length
+      ? setSkills(db, userId, mapping.scores)
+      : getSkills(db, userId)
+  ]);
 
   return {
     persisted: Boolean(persist),
@@ -72,6 +74,6 @@ export async function parseResume({ db, deepseek, userId, file, mode = 'auto', p
     model: simulated ? null : deepseek.model,
     is_simulated: simulated,
     resume,
-    saved: applyExtraction(db, userId, resume, persist)
+    saved: await applyExtraction(db, userId, resume, persist)
   };
 }

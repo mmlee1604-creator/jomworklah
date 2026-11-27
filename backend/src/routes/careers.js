@@ -6,8 +6,8 @@ import { careersQuerySchema, paramsIdSchema } from '../validation/schemas.js';
 export function careersRouter() {
   const router = Router();
 
-  router.get('/careers', validateQuery(careersQuerySchema), (req, res) => {
-    const careers = listCareers(req.app.locals.db, req.user.id, req.validatedQuery);
+  router.get('/careers', validateQuery(careersQuerySchema), async (req, res) => {
+    const careers = await listCareers(req.app.locals.db, req.user.id, req.validatedQuery);
     res.json({ data: careers, meta: { count: careers.length } });
   });
 
