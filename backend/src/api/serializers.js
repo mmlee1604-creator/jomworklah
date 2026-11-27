@@ -40,10 +40,26 @@ export function journeyView({ journey, profile, interests = [], roadmap = null, 
   };
 }
 
-export function courseView(course) {
+// Long text (description, career prospects) is only sent on the single-course endpoint.
+export function courseView(course, { detail = false } = {}) {
   if (!course) return null;
+  const { description, descriptionMs, careerProspects, careerProspectsMs, ...light } = course;
+  // Lists keep only what a card needs from each offering; address and website are detail-only.
+  const lightOfferings = (course.offerings ?? []).map(offering => ({
+    id: offering.id,
+    institution: offering.institution && {
+      id: offering.institution.id,
+      name: offering.institution.name,
+      state: offering.institution.state,
+      sector: offering.institution.sector
+    },
+    durationText: offering.durationText,
+    durationWeeks: offering.durationWeeks,
+    courseUrl: offering.courseUrl,
+    feeFree: offering.feeFree
+  }));
   return {
-    ...course,
+    ...(detail ? course : { ...light, offerings: lightOfferings }),
     provider: course.provider.id,
     providerName: course.provider.name,
     providerUrl: course.provider.url

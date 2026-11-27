@@ -18,6 +18,8 @@ npm run dev
 
 Then open <http://localhost:3000/candidate> and <http://localhost:3000/employer>. Use `localhost`, not `127.0.0.1`, unless `allowedDevOrigins` in `next.config.mjs` covers the host you use.
 
+The candidate site loads its TVET course catalogue from the API (Supabase is the source), so start the backend first (`cd backend; npm run dev`, port 8787). The API address is set in `public/js/config.js`. If the API is down, the Upskilling Hub shows an error with a retry button.
+
 ## Where things live
 
 - `app/layout.js` is the shared root layout: fonts, Tailwind CDN, `styles.css` and `skills-atlas.css`.

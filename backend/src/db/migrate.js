@@ -180,6 +180,25 @@ const migrations = [
       ALTER TABLE roadmaps ADD COLUMN skill_ids_json TEXT;
       ALTER TABLE roadmaps ADD COLUMN course_ids_json TEXT;
     `
+  },
+  {
+    // The course catalogue moved to Supabase. user_courses keeps plain course ids (no FK), and
+    // saved courses / frozen roadmap course lists that pointed at the old 10 examples are cleared.
+    version: 3,
+    name: 'courses-in-supabase',
+    sql: `
+      DROP TABLE user_courses;
+      CREATE TABLE user_courses (
+        user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        course_id TEXT NOT NULL,
+        added_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        PRIMARY KEY (user_id, course_id)
+      );
+      DROP TABLE course_skills;
+      DROP TABLE courses;
+      DROP TABLE providers;
+      UPDATE roadmaps SET skill_ids_json = NULL, course_ids_json = NULL;
+    `
   }
 ];
 

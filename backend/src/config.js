@@ -41,6 +41,12 @@ export function loadConfig(env = process.env) {
     resume: {
       maxFileBytes: toInt(env.RESUME_MAX_BYTES, 10 * 1024 * 1024)
     },
+    // Course catalogue source. Server-side only: the service-role key must never reach the browser.
+    supabase: {
+      url: (env.SUPABASE_URL || '').trim(),
+      serviceRoleKey: (env.SUPABASE_SERVICE_ROLE_KEY || '').trim(),
+      refreshMs: toInt(env.CATALOGUE_REFRESH_MS, 10 * 60_000)
+    },
     allowDevReset: toBool(env.ALLOW_DEV_RESET, false),
     rateLimit: {
       enabled: toBool(env.RATE_LIMIT, false),

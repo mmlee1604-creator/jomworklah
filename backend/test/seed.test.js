@@ -28,8 +28,6 @@ test('seeding is idempotent and catalogue counts match', () => {
       skills: expectedCounts.skills,
       interests: expectedCounts.interests,
       jobs: expectedCounts.jobs,
-      providers: expectedCounts.providers,
-      courses: expectedCounts.courses,
       personas: expectedCounts.personas
     });
 

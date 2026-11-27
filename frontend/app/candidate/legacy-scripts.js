@@ -6,6 +6,8 @@ import { useEffect } from "react";
    component, then the SPA shell. They must run in this order and after the
    skeleton markup exists, so they are injected one at a time. */
 const SOURCES = [
+  "/js/config.js",
+  "/js/api.js",
   "/js/mock-data.js",
   "/js/skills-atlas-data.js",
   "/js/skills-atlas.js",

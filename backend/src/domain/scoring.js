@@ -37,6 +37,11 @@ export function rankedCareers(jobs, scoreFor, profileInterests = []) {
   })).sort((a, b) => b.fit - a.fit || compareText(a.title, b.title));
 }
 
+// A programme can run at institutions in several states; a course "is in" a state if any does.
+export function courseInLocation(course, location) {
+  return (course.locations ?? [course.location]).includes(location);
+}
+
 export function rankedCourses(courses, gaps, profile = {}) {
   const positive = gaps.filter(item => item.gap > 0);
   return courses.map(course => ({
@@ -46,7 +51,7 @@ export function rankedCourses(courses, gaps, profile = {}) {
       .reduce((sum, item) => sum + item.priority, 0)
   })).sort((a, b) => b.relevance - a.relevance
     || Number(b.mode === profile.learningMode) - Number(a.mode === profile.learningMode)
-    || Number(b.location === profile.location) - Number(a.location === profile.location)
+    || Number(courseInLocation(b, profile.location)) - Number(courseInLocation(a, profile.location))
     || compareText(a.title, b.title));
 }
 

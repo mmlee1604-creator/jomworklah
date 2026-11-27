@@ -21,7 +21,7 @@ export function trainingRouter() {
   });
 
   router.get('/training/:id', validateParams(paramsIdSchema), (req, res) => {
-    res.json({ data: courseView(getTraining(req.app.locals.db, req.params.id)) });
+    res.json({ data: courseView(getTraining(req.app.locals.db, req.params.id), { detail: true }) });
   });
 
   return router;

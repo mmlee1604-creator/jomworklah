@@ -15,6 +15,31 @@ function foundationTask(skillId, skillNameFor) {
   return { id: `skill-${skillId}`, title, courseId: null };
 }
 
+export function formatWeeks(weeks) {
+  if (!weeks) return null;
+  if (weeks < 8) return `${weeks} week${weeks === 1 ? '' : 's'}`;
+  const months = Math.round(weeks / 4.345);
+  if (months < 24) return `about ${months} months`;
+  const years = Math.round(months / 12 * 2) / 2;
+  return `about ${years} years`;
+}
+
+function durationLabel(course) {
+  const low = formatWeeks(course.minWeeks);
+  const high = formatWeeks(course.maxWeeks);
+  if (!low) return null;
+  return high && high !== low ? `${low} to ${high}` : low;
+}
+
+// Real programmes run for months or years, so the roadmap task is about choosing and applying,
+// not "exploring". Illustrative sample courses keep their original wording.
+function trainingTaskTitle(course, courseId) {
+  if (!course) return `Explore the ${courseId} example pathway.`;
+  if (course.isIllustrative) return `Explore the ${course.title} example pathway.`;
+  const duration = durationLabel(course);
+  return `Check entry requirements and intake dates for ${course.title}${duration ? ` (${duration})` : ''}, then shortlist an institution.`;
+}
+
 // Mirrors the prototype's generateSnapshot(): top 3 gap skills and top 2 unsaved relevant courses.
 export function deriveRoadmapInputs({ job, scoreFor, skillNameFor, profile, courses, savedCourseIds = [] }) {
   const positive = gapsFor(job.requirements, scoreFor, skillNameFor).filter(item => item.gap > 0);
@@ -44,11 +69,7 @@ export function buildRoadmap({ job, scoreFor, skillNameFor, profile, courses, sa
 
   const training = trainingCourseIds.map(courseId => {
     const course = courseById.get(courseId);
-    return {
-      id: `course-${courseId}`,
-      title: course ? `Explore the ${course.title} example pathway.` : `Explore the ${courseId} example pathway.`,
-      courseId: course ? course.id : null
-    };
+    return { id: `course-${courseId}`, title: trainingTaskTitle(course, courseId), courseId: course ? course.id : null };
   });
   if (!training.length) {
     training.push({ id: 'training-review', title: 'Compare one official training pathway with the sample role requirements.', courseId: null });

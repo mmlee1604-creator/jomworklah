@@ -163,28 +163,9 @@ const jobs = [
   requirements: job.requirements.map(([skillId, level, weight]) => ({ skillId, level, weight }))
 }));
 
-const providers = {
-  elatih: { name: 'HRD Corp e-LATiH', url: 'https://elatih.hrdcorp.gov.my/' },
-  tvet: { name: 'UP_TVET', url: 'https://mohon.tvet.gov.my/' },
-  future: { name: 'MYFutureJobs / PERKESO', url: 'https://myfuturejobs.gov.my/training-programmes/' },
-  mahir: { name: 'MyMahir · TalentCorp', url: 'https://www.mymahir.my/' },
-  spike: { name: 'MySPIKE / NOSS', url: 'https://myspike.tvet.gov.my/platform/pekerja' }
-};
-
-const courses = [
-  ['sql-foundations', 'SQL Foundations', 'elatih', ['sql'], 'Online', 'Online', 2, 4],
-  ['dashboard-design', 'Data Analysis & Dashboard Design', 'mahir', ['data-viz', 'excel', 'python'], 'Online', 'Online', 3, 5],
-  ['frontend-basics', 'Responsive Websites & JavaScript', 'elatih', ['web', 'javascript'], 'Online', 'Online', 3, 6],
-  ['it-support', 'IT Support & Network Fundamentals', 'future', ['networking', 'troubleshoot'], 'Hybrid', 'Kuala Lumpur', 3, 6],
-  ['campaign-measurement', 'Digital Campaign Measurement', 'mahir', ['marketing', 'content', 'reporting'], 'Online', 'Online', 2, 4],
-  ['workplace-reporting', 'Workplace Communication & Reporting', 'future', ['communication', 'reporting', 'teamwork'], 'Hybrid', 'Selangor', 2, 4],
-  ['vehicle-service', 'Vehicle Servicing & Diagnostics', 'tvet', ['auto', 'electrical', 'sensors', 'troubleshoot'], 'In person', 'Perak', 4, 8],
-  ['workshop-safety', 'Workshop Safety Fundamentals', 'spike', ['safety', 'tools'], 'In person', 'Perak', 2, 4],
-  ['industrial-systems', 'Industrial Electrical & Sensor Basics', 'tvet', ['electrical', 'sensors', 'safety'], 'In person', 'Penang', 4, 8],
-  ['spreadsheet-workflows', 'Spreadsheet Workflows for Operations', 'elatih', ['excel', 'reporting'], 'Online', 'Online', 2, 3]
-].map(([id, title, provider, skillIds, mode, location, minWeeks, maxWeeks]) => ({
-  id, title, provider, skillIds, mode, location, minWeeks, maxWeeks, isIllustrative: true, fee: null
-}));
+// Courses come from the API (Supabase). These containers are filled by loadCatalogue() in app.js.
+const providers = {};
+const courses = [];
 
 // Holland Code (RIASEC) career-interest model. Job codes are illustrative three-letter approximations, strongest interest first.
 const hollandTypes = [

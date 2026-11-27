@@ -1,6 +1,7 @@
 import { AppError } from '../middleware/errors.js';
 import {
   compareText,
+  courseInLocation,
   gapsFor,
   matchesBudget,
   rankedCareers,
@@ -57,7 +58,7 @@ export function listTraining(db, userId, params = {}) {
     && (skill === 'All' || course.skillIds.includes(skill))
     && (source === 'All' || course.provider.id === source)
     && (mode === 'All' || course.mode === mode)
-    && (location === 'All' || course.location === location)
+    && (location === 'All' || courseInLocation(course, location))
     && matchesBudget(course.fee, budget, ctx.profile.budget));
 
   if (sort === 'name') courses.sort((a, b) => compareText(a.title, b.title));

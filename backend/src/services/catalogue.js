@@ -1,3 +1,5 @@
+import { getCourseCatalogue } from './course-catalogue.js';
+
 export function loadSkillList(db) {
   return db.prepare('SELECT id, name, category, description FROM skills ORDER BY name').all()
     .map(row => ({ id: row.id, name: row.name, category: row.category, description: row.description }));
@@ -87,33 +89,16 @@ export function loadJob(db, jobId) {
   return all.find(job => job.id === jobId) ?? null;
 }
 
-export function loadCourses(db) {
-  const rows = db.prepare(`
-    SELECT c.*, p.name AS provider_name, p.url AS provider_url
-    FROM courses c JOIN providers p ON p.id = c.provider_id
-    ORDER BY c.title
-  `).all();
-  const links = groupBy(db.prepare('SELECT * FROM course_skills').all(), 'course_id');
-
-  return rows.map(row => ({
-    id: row.id,
-    title: row.title,
-    provider: { id: row.provider_id, name: row.provider_name, url: row.provider_url },
-    skillIds: (links[row.id] ?? []).map(link => link.skill_id),
-    mode: row.mode,
-    location: row.location,
-    minWeeks: row.min_weeks,
-    maxWeeks: row.max_weeks,
-    fee: row.fee,
-    isIllustrative: Boolean(row.is_illustrative)
-  }));
+// Courses live in Supabase and are held in memory by course-catalogue.js (the `db` argument is
+// kept so existing callers do not change).
+export function loadCourses(_db) {
+  return getCourseCatalogue().courses;
 }
 
-export function loadCourse(db, courseId) {
-  return loadCourses(db).find(course => course.id === courseId) ?? null;
+export function loadCourse(_db, courseId) {
+  return getCourseCatalogue().courses.find(course => course.id === courseId) ?? null;
 }
 
-export function loadProviders(db) {
-  return db.prepare('SELECT id, name, url FROM providers ORDER BY name').all()
-    .map(row => ({ id: row.id, name: row.name, url: row.url }));
+export function loadProviders(_db) {
+  return [...getCourseCatalogue().providers].sort((a, b) => a.name.localeCompare(b.name, 'en'));
 }
