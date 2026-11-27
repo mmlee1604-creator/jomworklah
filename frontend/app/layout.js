@@ -11,7 +11,11 @@ export const viewport = {
   themeColor: "#fbf7f1",
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8787/api";
+const apiBase = process.env.NEXT_PUBLIC_API_BASE || (
+  process.env.NODE_ENV === "production"
+    ? "https://jomworklah.onrender.com/api"
+    : "http://localhost:8787/api"
+);
 const apiBaseLiteral = JSON.stringify(apiBase).replace(/</g, "\\u003c");
 
 export default function RootLayout({ children }) {
