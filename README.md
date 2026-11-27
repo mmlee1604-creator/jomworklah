@@ -279,7 +279,8 @@ npm run dev
 [next.config.mjs](frontend/next.config.mjs) covers your host.
 
 Start the backend first: the candidate app loads courses and saves progress through the API. Locally it
-uses `http://localhost:8787/api`; for deployment, set `NEXT_PUBLIC_API_BASE` during the frontend build.
+uses `http://localhost:8787/api`; production defaults to `https://jomworklah.onrender.com/api`.
+Set `NEXT_PUBLIC_API_BASE` during the frontend build to override either URL.
 
 The app degrades gracefully offline: layout, charts and every interaction work on local CSS and system
 fonts. An internet connection additionally loads the webfonts, Tailwind utilities from CDN, the 3D Atlas
@@ -367,8 +368,8 @@ npm run supabase:seed:generate
 2. Deploy the repository's `render.yaml` blueprint. In Render, set `DATABASE_URL`,
    `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `FRONTEND_ORIGIN` to the Supabase values and the
    exact Vercel site origin. Do not expose the database URL or service-role key to the browser.
-3. Create a Vercel project rooted at `frontend/`. Set `NEXT_PUBLIC_API_BASE` to the Render API URL
-   ending in `/api` (for example, `https://your-api.onrender.com/api`) and deploy.
+3. Create a Vercel project rooted at `frontend/`. The frontend defaults to
+   `https://jomworklah.onrender.com/api`; set `NEXT_PUBLIC_API_BASE` to override it and deploy.
 4. Confirm the Render health endpoint at `https://your-api.onrender.com/api/health`.
 
 For Vercel preview deployments, add their origins to the comma-separated `FRONTEND_ORIGIN` allowlist
