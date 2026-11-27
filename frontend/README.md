@@ -20,6 +20,8 @@ Then open <http://localhost:3000/candidate> and <http://localhost:3000/employer>
 
 The candidate site loads its TVET course catalogue and user data from the API, so start the backend first (`cd backend; npm run dev`, port 8787). For local development the API defaults to `http://localhost:8787/api`; production defaults to `https://jomworklah.onrender.com/api`. Set `NEXT_PUBLIC_API_BASE` to override either URL. The backend must allow the frontend's origin in `FRONTEND_ORIGIN`. If the API is down, the Upskilling Hub shows an error with a retry button.
 
+Visitors can upload a resume without creating an account using the guest session. Guest and registered-user uploads use live parsing when `DEEPSEEK_API_KEY` is configured; the original file is discarded after parsing. Demo-profile uploads remain simulated and do not send the selected file.
+
 ## Deploy to Vercel
 
 Create a Vercel project with the repository's `frontend/` directory as its root. Set

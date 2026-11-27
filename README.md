@@ -332,9 +332,9 @@ Set these values in `backend/.env` and restart the backend:
 These replace the old `DASHSCOPE_API_KEY` and `QWEN_*` settings. Use `?mode=live` to
 require real extraction; missing credentials and provider failures return errors.
 The independent `AI_*` settings still control narrative assessment and career explanations.
-The demo upload remains simulated. Signed-in candidates send their PDF/DOCX to
-`POST /api/parse-resume?mode=live`; the extracted profile and skills are saved, and the original
-file is not retained.
+Demo profile uploads remain simulated and never send a file. Guests and signed-in candidates can
+send a PDF/DOCX to `POST /api/parse-resume?mode=live` without requiring an account; extracted
+profile details and skills are saved to that session, and the original file is not retained.
 
 ### Supabase database
 
@@ -697,7 +697,7 @@ The pitch is stronger when the numbers are trustworthy, so the boundaries are st
 - **Holland Code is self-reported.** Picks are saved with the Supabase profile, but role codes remain illustrative approximations rather than an official O*NET lookup, and the 70/15/15 weighting is a design choice. The external O*NET test is English only and its result is entered by hand.
 - **Skills Atlas mixes real and synthetic data.** State and district geometry comes from official DOSM/open data; supply, demand, gap, employer and institution figures are synthetic and labelled "Demo data".
 - **No job-board ingestion yet** — careers and their requirements are curated seed data. Only the TVET programmes come from a real export.
-- **The candidate app depends on the API for profiles and saved progress, but not for everything.** Career matching still runs in the browser; MBTI and Holland selections are persisted to the profile in Supabase. Demo resume upload is simulated; registered accounts use live parsing. The employer site is still mock data. If the API is down the Upskilling Hub shows an error.
+- **The candidate app depends on the API for profiles and saved progress, but not for everything.** Career matching still runs in the browser; MBTI and Holland selections are persisted to the profile in Supabase. Demo resume upload is simulated; guests and registered accounts use live parsing. The employer site is still mock data. If the API is down the Upskilling Hub shows an error.
 - Supabase Auth manages account email/password credentials. The app database stores the account ID and candidate profile, not a copy of the password or original resume.
 
 ### Data sources the product is built to use
