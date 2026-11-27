@@ -182,22 +182,64 @@ const migrations = [
     `
   },
   {
-    // The course catalogue moved to Supabase. user_courses keeps plain course ids (no FK), and
-    // saved courses / frozen roadmap course lists that pointed at the old 10 examples are cleared.
     version: 3,
-    name: 'courses-in-supabase',
+    name: 'tvet-course-catalogue',
+    rebuildCourses: true,
     sql: `
-      DROP TABLE user_courses;
-      CREATE TABLE user_courses (
-        user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      CREATE TABLE courses_new (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE RESTRICT,
+        mode TEXT CHECK (mode IN ('Online','In person','Hybrid')),
+        location TEXT NOT NULL,
+        min_weeks INTEGER CHECK (min_weeks > 0),
+        max_weeks INTEGER CHECK (max_weeks > 0 AND max_weeks >= min_weeks),
+        fee REAL,
+        is_illustrative INTEGER NOT NULL DEFAULT 1 CHECK (is_illustrative IN (0,1)),
+        source TEXT,
+        source_course_id TEXT,
+        source_url TEXT,
+        course_code TEXT,
+        description TEXT,
+        category TEXT,
+        qualification_level TEXT,
+        duration_text TEXT,
+        duration_value REAL,
+        duration_unit TEXT,
+        career_prospects TEXT,
+        entry_requirements TEXT,
+        institution_sector TEXT,
+        address TEXT,
+        scraped_at TEXT,
+        source_page INTEGER,
+        scrape_status TEXT,
+        extra_attributes_json TEXT,
+        source_data_json TEXT,
+        imported_at TEXT,
+        UNIQUE(source, source_course_id)
+      );
+      INSERT INTO courses_new(id,title,provider_id,mode,location,min_weeks,max_weeks,fee,is_illustrative)
+        SELECT id,title,provider_id,mode,location,min_weeks,max_weeks,fee,is_illustrative FROM courses;
+      DROP TABLE courses;
+      ALTER TABLE courses_new RENAME TO courses;
+      CREATE INDEX idx_courses_provider ON courses(provider_id);
+      CREATE INDEX idx_courses_mode ON courses(mode);
+      CREATE INDEX idx_courses_location ON courses(location);
+    `
+  },
+  {
+    version: 4,
+    name: 'supabase-course-references',
+    sql: `
+      CREATE TABLE user_courses_new (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         course_id TEXT NOT NULL,
-        added_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
         PRIMARY KEY (user_id, course_id)
       );
-      DROP TABLE course_skills;
-      DROP TABLE courses;
-      DROP TABLE providers;
-      UPDATE roadmaps SET skill_ids_json = NULL, course_ids_json = NULL;
+      INSERT INTO user_courses_new SELECT user_id, course_id, added_at FROM user_courses;
+      DROP TABLE user_courses;
+      ALTER TABLE user_courses_new RENAME TO user_courses;
     `
   }
 ];
@@ -214,10 +256,21 @@ export function migrate(db) {
 
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;
-    transaction(db, () => {
-      db.exec(migration.sql);
-      db.prepare('INSERT INTO schema_migrations(version) VALUES(?)').run(migration.version);
-    });
+    // SQLite table rebuild: disable FK enforcement outside the transaction,
+    // preserve referencing tables, then check integrity before committing.
+    const foreignKeys = db.prepare('PRAGMA foreign_keys').get().foreign_keys;
+    if (migration.rebuildCourses) db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      transaction(db, () => {
+        db.exec(migration.sql);
+        if (db.prepare('PRAGMA foreign_key_check').all().length) {
+          throw new Error(`Foreign key violations in migration ${migration.version}`);
+        }
+        db.prepare('INSERT INTO schema_migrations(version) VALUES(?)').run(migration.version);
+      });
+    } finally {
+      if (migration.rebuildCourses && foreignKeys) db.exec('PRAGMA foreign_keys = ON');
+    }
   }
 
   return migrations.length;

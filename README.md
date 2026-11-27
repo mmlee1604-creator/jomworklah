@@ -12,7 +12,7 @@
 
 [![Frontend](https://img.shields.io/badge/frontend-Next.js%2016%20·%20React%2019-e65536?style=flat-square)](frontend/)
 [![Backend](https://img.shields.io/badge/backend-Node%2024%20·%20Express%205%20·%20Supabase%20Postgres-087a63?style=flat-square)](backend/)
-[![Tests](https://img.shields.io/badge/tests-72%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
+[![Tests](https://img.shields.io/badge/tests-80%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
 [![AI](https://img.shields.io/badge/AI-rule%20engine%20%2B%20DeepSeek%20OCR-173c35?style=flat-square)](backend/src/ai/)
 
 > **Our mission:** to bridge the gap between education, skills development and employment in Malaysia,
@@ -226,7 +226,7 @@ QodeFest/
 │   ├── src/import/        cleaning and skill keywords for the course import
 │   ├── scripts/           import, translate and skill-mapping tools for the catalogue
 │   ├── supabase/          catalogue schema, application schema and generated seed SQL
-│   └── test/              72 tests, including prototype-parity assertions
+│   └── test/              80 tests, including prototype-parity assertions
 ├── slide deck/        the pitch deck (jom-kerja-lah.html)
 └── docs/screenshots/  the nine captures in section 2
 ```
@@ -393,6 +393,36 @@ node --env-file=.env scripts/map-course-skills.mjs --write    # save course -> s
 Every step can be re-run safely. Skill keywords (English and Malay) live in
 `backend/src/import/skill-keywords.js`. If several people share one Supabase project, tell the team before
 re-running a `--write` step, because it changes everyone's data.
+
+### Optional local SQLite import (offline tool)
+
+This separate tool imports the scraper's 20-column `Courses` worksheet into a local SQLite
+database (`DB_PATH`, default `backend/data/jomworklah.db`). It does not populate Supabase
+or the app's live catalogue. For live data, use the Supabase import steps above. From `backend/`:
+
+```powershell
+npm run db:import:tvet -- "C:\path\to\tvet_courses_first_1000.xlsx"
+```
+
+Reading `.xlsx` requires Python 3 (standard library only, no pip packages). If `python`
+is unavailable, append `--python "C:\path\to\python.exe"`. A JSON array with the same
+column names is also accepted and does not require Python.
+
+The importer backs up an existing database before migrating it. Imports run in one
+transaction, retain demo courses and saved user data, and update existing source IDs
+instead of creating duplicates. TVET IDs are namespaced, e.g. `tvet-7111`. Institutions
+become providers. All original cell values are retained in `courses.source_data_json`.
+
+Migration 3 adds course codes, descriptions, qualification levels, original duration
+and its unit, entry requirements, career prospects, source URLs, scrape metadata and
+extra attributes. Unknown modes, fees and week ranges remain `NULL`. Months and days
+are not converted into invented week ranges; `0 Bulan` remains a raw zero duration.
+Missing/invalid institution links are omitted as clickable URLs while preserving the
+source value. These are scraped listings, not verified current intake availability.
+
+The local importer initially creates no `course_skills` links. Its SQLite rows are retained
+for offline inspection, including saved course references and roadmap snapshots. The running
+API reads the Supabase catalogue cache; it does not serve rows from this local database.
 
 ---
 
@@ -590,7 +620,7 @@ memory, so nothing personal is uploaded during the demo.
 cd backend && npm test
 ```
 
-**72 tests, 0 failures.** They run against in-memory SQLite and a built-in 10-course fixture (never a live Supabase project) and cover behavior that could otherwise drift
+**80 tests, 0 failures.** They run against in-memory SQLite and a built-in 10-course fixture (never a live Supabase project) and cover behavior that could otherwise drift
 silently:
 
 | Suite | Guards |
@@ -600,6 +630,7 @@ silently:
 | `seed.test.js` | idempotent reruns, weights sum to 1, foreign-key integrity, expected catalogue counts |
 | `api.test.js` + `parse-resume.test.js` | session bootstrap, validation and auth failures, upload type and size rejection |
 | `deepseek-ocr.test.js` | PDF/DOCX multipart OCR, structured extraction, environment settings, provider errors and incomplete output (mocked provider; no paid API calls) |
+| `import-tvet.test.js` | schema migration preserves references, imports are repeatable and atomic, missing data stays unknown, imported course shapes work in training and roadmaps using an injected test catalogue |
 
 Parity is the point: the assertions encode the **frontend prototype's** published numbers, so the engine
 and the UI cannot quietly disagree.
