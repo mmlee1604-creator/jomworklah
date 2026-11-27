@@ -8,22 +8,22 @@ import { personaSchema } from '../validation/schemas.js';
 export function sessionsRouter() {
   const router = Router();
 
-  router.post('/session', (req, res) => {
+  router.post('/session', async (req, res) => {
     const db = req.app.locals.db;
-    const { token, user } = createGuestSession(db);
-    res.status(201).json({ data: { token, ...getMe(db, user.id, user) } });
+    const { token, user } = await createGuestSession(db);
+    res.status(201).json({ data: { token, ...await getMe(db, user.id, user) } });
   });
 
-  router.get('/demo/personas', (req, res) => {
-    const personas = listPersonas(req.app.locals.db);
+  router.get('/demo/personas', async (req, res) => {
+    const personas = await listPersonas(req.app.locals.db);
     res.json({ data: personas, meta: { count: personas.length } });
   });
 
-  router.post('/demo/session', validateBody(personaSchema), (req, res) => {
+  router.post('/demo/session', validateBody(personaSchema), async (req, res) => {
     const db = req.app.locals.db;
-    const { token, userId, personaKey } = createDemoSession(db, req.body.personaKey);
+    const { token, userId, personaKey } = await createDemoSession(db, req.body.personaKey);
     const user = { id: userId, kind: 'demo_clone', personaKey };
-    res.status(201).json({ data: { token, ...getMe(db, userId, user) } });
+    res.status(201).json({ data: { token, ...await getMe(db, userId, user) } });
   });
 
   return router;

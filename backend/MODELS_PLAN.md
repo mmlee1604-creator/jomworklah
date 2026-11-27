@@ -1,8 +1,13 @@
 # Jom Kerja Lah — Data Model & Backend Design
 
-Status: design report, no code implemented.
+Status: original design report; its SQLite persistence plan is superseded by the Supabase Postgres runtime.
 Inputs: `product-requirements`, `jomworklah/js/mock-data.js`, `jomworklah/js/app.js`.
-Stack agreed: Node.js 24 + Express, SQLite, deterministic rule engine behind an AI adapter, anonymous demo sessions.
+Current stack: Node.js 24 + Express, Supabase Postgres, deterministic rule engine behind an AI adapter, anonymous demo sessions.
+
+The current SQL setup is maintained in [`supabase/schema.sql`](supabase/schema.sql),
+[`supabase/app-schema.sql`](supabase/app-schema.sql), and [`supabase/seed.sql`](supabase/seed.sql).
+The SQLite DDL and migration notes below are retained as historical design context; SQLite remains
+only in the local test fixtures.
 
 ---
 

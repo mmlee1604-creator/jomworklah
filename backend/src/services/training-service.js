@@ -20,35 +20,38 @@ import {
 } from './catalogue.js';
 import { getJourney } from './journey-service.js';
 
-function context(db, userId) {
-  const scores = loadScoreMap(db, userId);
-  const interests = loadInterestIds(db, userId);
-  const skillMap = loadSkillMap(db);
+async function context(db, userId) {
+  const [scores, interests, skillMap, profileRow] = await Promise.all([
+    loadScoreMap(db, userId),
+    loadInterestIds(db, userId),
+    loadSkillMap(db),
+    loadProfileRow(db, userId)
+  ]);
   return {
     interests,
-    profile: toProfile(loadProfileRow(db, userId)) ?? { learningMode: 'Online', location: '' },
+    profile: toProfile(profileRow) ?? { learningMode: 'Online', location: '' },
     scoreFor: skillId => scores[skillId] ?? 0,
     skillNameFor: skillId => skillMap.get(skillId)?.name ?? skillId
   };
 }
 
-function resolveRole(db, userId, ctx) {
-  const journey = getJourney(db, userId);
+async function resolveRole(db, userId, ctx) {
+  const journey = await getJourney(db, userId);
   if (journey.targetJobId) {
-    const job = loadJob(db, journey.targetJobId);
+    const job = await loadJob(db, journey.targetJobId);
     if (job) return job;
   }
-  return rankedCareers(loadJobs(db), ctx.scoreFor, ctx.interests)[0] ?? null;
+  return rankedCareers(await loadJobs(db), ctx.scoreFor, ctx.interests)[0] ?? null;
 }
 
-export function listTraining(db, userId, params = {}) {
+export async function listTraining(db, userId, params = {}) {
   const {
     view = 'suggested', skill = 'All', source = 'All', mode = 'All',
     location = 'All', budget = 'All', sort = 'relevance'
   } = params;
 
-  const ctx = context(db, userId);
-  const job = resolveRole(db, userId, ctx);
+  const ctx = await context(db, userId);
+  const job = await resolveRole(db, userId, ctx);
   if (!job) return { job: null, courses: [] };
 
   const gaps = gapsFor(job.requirements, ctx.scoreFor, ctx.skillNameFor);
@@ -69,8 +72,8 @@ export function listTraining(db, userId, params = {}) {
   };
 }
 
-export function getTraining(db, courseId) {
-  const course = loadCourse(db, courseId);
+export async function getTraining(db, courseId) {
+  const course = await loadCourse(db, courseId);
   if (!course) throw new AppError(404, 'COURSE_NOT_FOUND', `Unknown course '${courseId}'.`);
   return course;
 }

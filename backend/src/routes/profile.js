@@ -21,36 +21,36 @@ import {
 export function profileRouter() {
   const router = Router();
 
-  router.get('/me', (req, res) => {
-    res.json({ data: getMe(req.app.locals.db, req.user.id, req.user) });
+  router.get('/me', async (req, res) => {
+    res.json({ data: await getMe(req.app.locals.db, req.user.id, req.user) });
   });
 
-  router.put('/me/onboarding', validateBody(onboardingSchema), (req, res) => {
+  router.put('/me/onboarding', validateBody(onboardingSchema), async (req, res) => {
     const db = req.app.locals.db;
-    completeOnboarding(db, req.user.id, req.body);
-    res.json({ data: getMe(db, req.user.id, req.user) });
+    await completeOnboarding(db, req.user.id, req.body);
+    res.json({ data: await getMe(db, req.user.id, req.user) });
   });
 
-  router.patch('/me/profile', validateBody(profilePatchSchema), (req, res) => {
-    res.json({ data: updateProfile(req.app.locals.db, req.user.id, req.body) });
+  router.patch('/me/profile', validateBody(profilePatchSchema), async (req, res) => {
+    res.json({ data: await updateProfile(req.app.locals.db, req.user.id, req.body) });
   });
 
-  router.post('/me/profile/sample-reset', (req, res) => {
+  router.post('/me/profile/sample-reset', async (req, res) => {
     const db = req.app.locals.db;
-    restoreSampleProfile(db, req.user.id);
-    res.json({ data: getMe(db, req.user.id, req.user) });
+    await restoreSampleProfile(db, req.user.id);
+    res.json({ data: await getMe(db, req.user.id, req.user) });
   });
 
-  router.put('/me/skills', validateBody(skillsBulkSchema), (req, res) => {
-    res.json({ data: setSkills(req.app.locals.db, req.user.id, req.body.scores) });
+  router.put('/me/skills', validateBody(skillsBulkSchema), async (req, res) => {
+    res.json({ data: await setSkills(req.app.locals.db, req.user.id, req.body.scores) });
   });
 
-  router.patch('/me/skills/:skillId', validateParams(paramsSkillSchema), validateBody(skillPatchSchema), (req, res) => {
-    res.json({ data: setSkill(req.app.locals.db, req.user.id, req.params.skillId, req.body.evidenceLevel) });
+  router.patch('/me/skills/:skillId', validateParams(paramsSkillSchema), validateBody(skillPatchSchema), async (req, res) => {
+    res.json({ data: await setSkill(req.app.locals.db, req.user.id, req.params.skillId, req.body.evidenceLevel) });
   });
 
-  router.put('/me/interests', validateBody(interestsSchema), (req, res) => {
-    res.json({ data: setInterests(req.app.locals.db, req.user.id, req.body.interests) });
+  router.put('/me/interests', validateBody(interestsSchema), async (req, res) => {
+    res.json({ data: await setInterests(req.app.locals.db, req.user.id, req.body.interests) });
   });
 
   return router;

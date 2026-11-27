@@ -1,30 +1,30 @@
 import { getCourseCatalogue } from './course-catalogue.js';
 
-export function loadSkillList(db) {
-  return db.prepare('SELECT id, name, category, description FROM skills ORDER BY name').all()
+export async function loadSkillList(db) {
+  return (await db.prepare('SELECT id, name, category, description FROM skills ORDER BY name').all())
     .map(row => ({ id: row.id, name: row.name, category: row.category, description: row.description }));
 }
 
-export function loadSkillMap(db) {
-  return new Map(loadSkillList(db).map(skill => [skill.id, skill]));
+export async function loadSkillMap(db) {
+  return new Map((await loadSkillList(db)).map(skill => [skill.id, skill]));
 }
 
-export function loadInterestList(db) {
-  return db.prepare('SELECT id, label FROM interests ORDER BY label').all()
+export async function loadInterestList(db) {
+  return (await db.prepare('SELECT id, label FROM interests ORDER BY label').all())
     .map(row => ({ id: row.id, label: row.label }));
 }
 
-export function loadInterestIds(db, userId) {
-  return db.prepare(`
+export async function loadInterestIds(db, userId) {
+  return (await db.prepare(`
     SELECT pi.interest_id FROM profile_interests pi
     JOIN interests i ON i.id = pi.interest_id
     WHERE pi.user_id = ?
     ORDER BY i.label
-  `).all(userId).map(row => row.interest_id);
+  `).all(userId)).map(row => row.interest_id);
 }
 
-export function loadProfileRow(db, userId) {
-  return db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(userId) ?? null;
+export async function loadProfileRow(db, userId) {
+  return (await db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(userId)) ?? null;
 }
 
 export function toProfile(row) {
@@ -44,9 +44,9 @@ export function toProfile(row) {
   };
 }
 
-export function loadScoreMap(db, userId) {
+export async function loadScoreMap(db, userId) {
   const map = {};
-  const rows = db.prepare('SELECT skill_id, evidence_level FROM profile_skills WHERE user_id = ?').all(userId);
+  const rows = await db.prepare('SELECT skill_id, evidence_level FROM profile_skills WHERE user_id = ?').all(userId);
   for (const row of rows) map[row.skill_id] = row.evidence_level;
   return map;
 }
@@ -56,13 +56,20 @@ const groupBy = (rows, key) => rows.reduce((acc, row) => {
   return acc;
 }, {});
 
-export function loadJobs(db) {
-  const jobs = db.prepare('SELECT * FROM jobs ORDER BY title').all();
-  const requirements = groupBy(db.prepare('SELECT * FROM job_requirements').all(), 'job_id');
-  const tags = groupBy(db.prepare('SELECT * FROM job_tags').all(), 'job_id');
-  const responsibilities = groupBy(db.prepare('SELECT * FROM job_responsibilities ORDER BY job_id, position').all(), 'job_id');
-  const progression = groupBy(db.prepare('SELECT * FROM job_progression ORDER BY job_id, position').all(), 'job_id');
-  const projects = groupBy(db.prepare('SELECT * FROM job_projects ORDER BY job_id, position').all(), 'job_id');
+export async function loadJobs(db) {
+  const [jobs, requirementRows, tagRows, responsibilityRows, progressionRows, projectRows] = await Promise.all([
+    db.prepare('SELECT * FROM jobs ORDER BY title').all(),
+    db.prepare('SELECT * FROM job_requirements').all(),
+    db.prepare('SELECT * FROM job_tags').all(),
+    db.prepare('SELECT * FROM job_responsibilities ORDER BY job_id, position').all(),
+    db.prepare('SELECT * FROM job_progression ORDER BY job_id, position').all(),
+    db.prepare('SELECT * FROM job_projects ORDER BY job_id, position').all()
+  ]);
+  const requirements = groupBy(requirementRows, 'job_id');
+  const tags = groupBy(tagRows, 'job_id');
+  const responsibilities = groupBy(responsibilityRows, 'job_id');
+  const progression = groupBy(progressionRows, 'job_id');
+  const projects = groupBy(projectRows, 'job_id');
 
   return jobs.map(job => ({
     id: job.id,
@@ -84,8 +91,8 @@ export function loadJobs(db) {
   }));
 }
 
-export function loadJob(db, jobId) {
-  const all = loadJobs(db);
+export async function loadJob(db, jobId) {
+  const all = await loadJobs(db);
   return all.find(job => job.id === jobId) ?? null;
 }
 

@@ -11,8 +11,8 @@ export function aiRouter() {
     const db = req.app.locals.db;
     const result = await req.app.locals.ai.analyzeNarrative({
       narrative: req.body.narrative,
-      skills: loadSkillList(db),
-      interests: loadInterestList(db)
+      skills: await loadSkillList(db),
+      interests: await loadInterestList(db)
     });
     res.json({ data: result });
   });

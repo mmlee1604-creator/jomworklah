@@ -1,21 +1,21 @@
 import { createAiAdapter } from './ai/index.js';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
-import { closeDatabase, openDatabase } from './db/connection.js';
-import { migrate } from './db/migrate.js';
-import { seed } from './db/seed.js';
+import { closeDatabase, openPostgresDatabase } from './db/connection.js';
 import { startCatalogue } from './services/course-catalogue.js';
 
 const config = loadConfig();
 
 let db;
 try {
-  db = openDatabase(config.dbPath);
-  migrate(db);
-  seed(db);
+  db = await openPostgresDatabase(config.databaseUrl);
+  const { count } = await db.prepare('SELECT COUNT(*) AS count FROM skills').get();
+  if (Number(count) === 0) {
+    throw new Error('Supabase application tables are empty. Apply app-schema.sql and seed.sql before starting the API.');
+  }
 } catch (error) {
-  console.error('Failed to prepare the database:', error);
-  closeDatabase(db);
+  console.error('Failed to prepare the Supabase database:', error);
+  await closeDatabase(db);
   process.exit(1);
 }
 
@@ -29,10 +29,15 @@ if (config.supabase.url && config.supabase.serviceRoleKey) {
     catalogue = await startCatalogue({ client, refreshMs: config.supabase.refreshMs });
   } catch (error) {
     console.error('Failed to load the course catalogue from Supabase:', error.message);
-    closeDatabase(db);
+    await closeDatabase(db);
     process.exit(1);
   }
 } else {
+  if (config.nodeEnv === 'production') {
+    console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production for the course catalogue.');
+    await closeDatabase(db);
+    process.exit(1);
+  }
   console.warn('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set: serving only the 10 illustrative sample courses.');
 }
 
@@ -46,8 +51,10 @@ function shutdown(signal) {
   console.log(`${signal} received, shutting down.`);
   catalogue.stop();
   server.close(() => {
-    closeDatabase(db);
-    process.exit(0);
+    closeDatabase(db).then(() => process.exit(0), error => {
+      console.error('Failed to close the Supabase database:', error);
+      process.exit(1);
+    });
   });
   setTimeout(() => process.exit(1), 10_000).unref();
 }

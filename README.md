@@ -11,8 +11,8 @@
 **Live demo:** [https://fleet-mistral-h3k2xg0.tmp.now/candidate](https://jomworklah-two.vercel.app)
 
 [![Frontend](https://img.shields.io/badge/frontend-Next.js%2016%20·%20React%2019-e65536?style=flat-square)](frontend/)
-[![Backend](https://img.shields.io/badge/backend-Node%2024%20·%20Express%205%20·%20SQLite%20·%20Supabase-087a63?style=flat-square)](backend/)
-[![Tests](https://img.shields.io/badge/tests-70%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
+[![Backend](https://img.shields.io/badge/backend-Node%2024%20·%20Express%205%20·%20Supabase%20Postgres-087a63?style=flat-square)](backend/)
+[![Tests](https://img.shields.io/badge/tests-72%20passing-e5f5ed?style=flat-square&labelColor=087a63&color=087a63&logo=node.js&logoColor=e5f5ed)](backend/test/)
 [![AI](https://img.shields.io/badge/AI-rule%20engine%20%2B%20DeepSeek%20OCR-173c35?style=flat-square)](backend/src/ai/)
 
 > **Our mission:** to bridge the gap between education, skills development and employment in Malaysia,
@@ -218,15 +218,15 @@ QodeFest/
 │   ├── app/candidate/     job-seeker shell (header, sidebar, dialogs)
 │   ├── app/employer/      employer talent search
 │   └── public/js/         the SPA, API client (api.js, config.js), mock careers and skills, Skills Atlas
-├── backend/           Express 5 API: SQLite for users and journeys, Supabase for the course catalogue
+├── backend/           Express 5 API: Supabase Postgres for application data and the course catalogue
 │   ├── src/domain/        pure engine: scoring, roadmap, assessment, resume mapping
 │   ├── src/ai/            rule adapter · LLM adapter · DeepSeek OCR client
 │   ├── src/routes/        thin HTTP layer
 │   ├── src/services/      catalogue cache (Supabase), journeys, training, profile
 │   ├── src/import/        cleaning and skill keywords for the course import
 │   ├── scripts/           import, translate and skill-mapping tools for the catalogue
-│   ├── supabase/          schema.sql for the course catalogue tables
-│   └── test/              70 tests, including prototype-parity assertions
+│   ├── supabase/          catalogue schema, application schema and generated seed SQL
+│   └── test/              72 tests, including prototype-parity assertions
 ├── slide deck/        the pitch deck (jom-kerja-lah.html)
 └── docs/screenshots/  the nine captures in section 2
 ```
@@ -239,8 +239,8 @@ flowchart TB
     end
     subgraph BE["backend — Express 5"]
         R["routes"] --> S["services"] --> D["domain<br/>scoring · roadmap"]
-        D --> DB[("SQLite<br/>node:sqlite")]
-        S --> SB[("Supabase<br/>course catalogue")]
+        D --> DB[("Supabase Postgres<br/>profiles · journeys · reference data")]
+        S --> SB[("Supabase<br/>TVET course catalogue")]
         D --> AI["AI port<br/>rule | llm | deepseek-ocr"]
     end
     C -->|fetch| R
@@ -260,7 +260,7 @@ flowchart TB
 
 ## 7. Quick Start
 
-Node.js **24 or newer** is required (the backend uses the built-in `node:sqlite`).
+Node.js **24 or newer** is required.
 
 ### Frontend
 
@@ -278,9 +278,8 @@ npm run dev
 `/` redirects to `/candidate`. Use `localhost`, not `127.0.0.1`, unless `allowedDevOrigins` in
 [next.config.mjs](frontend/next.config.mjs) covers your host.
 
-Start the backend first: the candidate app loads courses and saves progress through the API. Its address
-is set in [`frontend/public/js/config.js`](frontend/public/js/config.js) (default `http://localhost:8787/api`).
-The course catalogue also needs an internet connection, because the API reads it from Supabase.
+Start the backend first: the candidate app loads courses and saves progress through the API. Locally it
+uses `http://localhost:8787/api`; for deployment, set `NEXT_PUBLIC_API_BASE` during the frontend build.
 
 The app degrades gracefully offline: layout, charts and every interaction work on local CSS and system
 fonts. An internet connection additionally loads the webfonts, Tailwind utilities from CDN, the 3D Atlas
@@ -291,7 +290,13 @@ view and outbound links to official training portals.
 ```bash
 cd backend
 npm install
-cp .env.example .env      # add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for the real course catalogue
+```
+
+Set `DATABASE_URL` to the Supabase PostgreSQL connection string, plus `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` for the TVET catalogue, in `backend/.env`. Keep these backend credentials
+private. Initialize the database and start the API:
+
+```bash
 npm run db:migrate
 npm run db:seed
 npm run dev               # http://localhost:8787
@@ -328,18 +333,46 @@ require real extraction; missing credentials and provider failures return errors
 The independent `AI_*` settings still control narrative assessment and career explanations.
 The candidate app's resume upload step is still simulated; it does not call `POST /api/parse-resume` yet.
 
-### Course catalogue (Supabase)
+### Supabase database
 
-Courses are not stored in SQLite. The API loads them from Supabase at startup (about 1.5 seconds), keeps
-them in memory and refreshes every 10 minutes (`CATALOGUE_REFRESH_MS`).
+Application profiles, sessions, skills, careers, preferences and roadmaps are stored in Supabase
+Postgres. The API uses the server-only `DATABASE_URL` connection string. It also loads the TVET course
+catalogue from Supabase at startup, keeps it in memory and refreshes every 10 minutes
+(`CATALOGUE_REFRESH_MS`).
 
 | Variable | Purpose |
 |---|---|
+| `DATABASE_URL` | Supabase Postgres connection string; keep it backend-only |
 | `SUPABASE_URL` | the project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | the **Secret** key. Backend only: never put it in the frontend or commit it |
 
-Without these two variables the API still starts, but serves only 10 illustrative sample courses, logs a
-warning and reports `"source":"fixture"` on `/api/health`.
+For a new Supabase project, run [`backend/supabase/schema.sql`](backend/supabase/schema.sql),
+[`backend/supabase/app-schema.sql`](backend/supabase/app-schema.sql), then
+[`backend/supabase/seed.sql`](backend/supabase/seed.sql) in the SQL Editor. The first file creates the
+TVET catalogue tables; the latter two create and seed the application tables. `npm run db:migrate` and
+`npm run db:seed` apply the same SQL using `DATABASE_URL`. Existing course-catalogue tables/data are
+preserved when reapplying the idempotent schema.
+
+The seed file is generated from the built-in demo/reference data:
+
+```bash
+cd backend
+npm run supabase:seed:generate
+```
+
+### Deploy to Vercel and Render
+
+1. In Supabase, get the PostgreSQL connection string (use the transaction pooler where appropriate)
+   and set it as `DATABASE_URL` in `backend/.env`, then run `npm run db:migrate` and `npm run db:seed`.
+2. Deploy the repository's `render.yaml` blueprint. In Render, set `DATABASE_URL`,
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `FRONTEND_ORIGIN` to the Supabase values and the
+   exact Vercel site origin. Do not expose the database URL or service-role key to the browser.
+3. Create a Vercel project rooted at `frontend/`. Set `NEXT_PUBLIC_API_BASE` to the Render API URL
+   ending in `/api` (for example, `https://your-api.onrender.com/api`) and deploy.
+4. Confirm the Render health endpoint at `https://your-api.onrender.com/api/health`.
+
+For Vercel preview deployments, add their origins to the comma-separated `FRONTEND_ORIGIN` allowlist
+if you need previews to call the API.
 
 To load the catalogue into a new Supabase project:
 
@@ -556,7 +589,7 @@ memory, so nothing personal is uploaded during the demo.
 cd backend && npm test
 ```
 
-**70 tests, 0 failures.** They run against real SQLite and a built-in 10-course fixture (never Supabase) and cover behavior that could otherwise drift
+**72 tests, 0 failures.** They run against in-memory SQLite and a built-in 10-course fixture (never a live Supabase project) and cover behavior that could otherwise drift
 silently:
 
 | Suite | Guards |
@@ -590,7 +623,7 @@ whitelist, SHA-256-hashed bearer tokens, Zod validation with unknown keys stripp
 | 3D Atlas | Three.js r128 from CDN | extruded demand columns over real boundaries |
 | Styling | own design system + Tailwind CDN | the CSS carries the identity; utilities for speed |
 | Backend | Node 24 · Express 5 · Zod | same language as the frontend |
-| Database | SQLite via built-in `node:sqlite` for users and journeys · Supabase (Postgres) for the course catalogue | zero setup for user state; one catalogue shared by the whole team |
+| Database | Supabase Postgres for application state and the course catalogue | durable shared data; backend-only database credentials |
 | AI | rule engine → OpenAI-compatible → DeepSeek OCR + `deepseek-flash` | offline-first, live when a key exists |
 | Tests | `node:test` | no runner to install |
 

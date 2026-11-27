@@ -10,13 +10,13 @@ import { courseView, interestsMapView, providersMapView } from '../api/serialize
 export function catalogueRouter() {
   const router = Router();
 
-  router.get('/skills', (req, res) => {
-    const skills = loadSkillList(req.app.locals.db);
+  router.get('/skills', async (req, res) => {
+    const skills = await loadSkillList(req.app.locals.db);
     res.json({ data: { legend: evidenceLegend, skills }, meta: { count: skills.length } });
   });
 
-  router.get('/interests', (req, res) => {
-    const interests = loadInterestList(req.app.locals.db);
+  router.get('/interests', async (req, res) => {
+    const interests = await loadInterestList(req.app.locals.db);
     res.json({ data: interestsMapView(interests), meta: { count: interests.length } });
   });
 

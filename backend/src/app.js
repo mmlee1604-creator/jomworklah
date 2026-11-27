@@ -74,9 +74,9 @@ export function createApp({
 
   if (config.rateLimit.enabled) app.use(rateLimiter(config.rateLimit));
 
-  const health = (req, res, next) => {
+  const health = async (req, res, next) => {
     try {
-      req.app.locals.db.prepare('SELECT 1 AS ok').get();
+      await req.app.locals.db.prepare('SELECT 1 AS ok').get();
       res.json({ data: { status: 'ok', db: 'ok', catalogue: catalogueInfo() } });
     } catch (error) {
       next(error);

@@ -8,8 +8,8 @@ import { paramsIdSchema, trainingQuerySchema } from '../validation/schemas.js';
 export function trainingRouter() {
   const router = Router();
 
-  router.get('/training', validateQuery(trainingQuerySchema), (req, res) => {
-    const { job, courses } = listTraining(req.app.locals.db, req.user.id, req.validatedQuery);
+  router.get('/training', validateQuery(trainingQuerySchema), async (req, res) => {
+    const { job, courses } = await listTraining(req.app.locals.db, req.user.id, req.validatedQuery);
     res.json({
       data: courses.map(courseView),
       meta: {
@@ -20,8 +20,8 @@ export function trainingRouter() {
     });
   });
 
-  router.get('/training/:id', validateParams(paramsIdSchema), (req, res) => {
-    res.json({ data: courseView(getTraining(req.app.locals.db, req.params.id), { detail: true }) });
+  router.get('/training/:id', validateParams(paramsIdSchema), async (req, res) => {
+    res.json({ data: courseView(await getTraining(req.app.locals.db, req.params.id), { detail: true }) });
   });
 
   return router;

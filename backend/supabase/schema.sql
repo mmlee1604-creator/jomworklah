@@ -55,7 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_offerings_course      ON course_offerings(course_
 CREATE INDEX IF NOT EXISTS idx_offerings_institution ON course_offerings(institution_id);
 
 -- ── Skills taught (feeds the recommendation engine) ─────────
--- skill_id refers to skills in the backend seed (no FK: skills live in the API database).
+-- skill_id refers to app skills seeded by seed.sql; imports may run before app data is initialized.
 CREATE TABLE IF NOT EXISTS course_skills (
   course_id   text NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   skill_id    text NOT NULL,
