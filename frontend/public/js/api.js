@@ -1,5 +1,4 @@
-// Minimal API client for the candidate app. Public endpoints need no token; user endpoints
-// (added in later steps) send the bearer token for the current persona.
+// Public endpoints need no token; authenticated requests send the active demo or Supabase token.
 (function () {
   const localApiHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const defaultApiBase = localApiHost
@@ -17,16 +16,16 @@
     }
   }
 
-  async function request(method, path, { body, token } = {}) {
+  async function request(method, path, { body, token, multipart = false } = {}) {
     let response;
     try {
       response = await fetch(base + path, {
         method,
         headers: {
-          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(body === undefined || multipart ? {} : { 'content-type': 'application/json' }),
           ...(token ? { authorization: 'Bearer ' + token } : {})
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
         signal: AbortSignal.timeout(TIMEOUT_MS)
       });
     } catch (error) {
@@ -54,6 +53,11 @@
     ApiError,
     get: (path, options) => request('GET', path, options),
     post: (path, body, options) => request('POST', path, { ...options, body }),
+    upload: (path, file, { token } = {}) => {
+      const body = new FormData();
+      body.append('file', file, file.name);
+      return request('POST', path, { body, token, multipart: true });
+    },
     put: (path, body, options) => request('PUT', path, { ...options, body }),
     patch: (path, body, options) => request('PATCH', path, { ...options, body }),
     delete: (path, options) => request('DELETE', path, options)

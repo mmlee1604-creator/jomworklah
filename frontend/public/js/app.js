@@ -42,9 +42,9 @@ const nav = [
 const onboardingViews = ['welcome', 'upload', 'profile-review'];
 const storageKey = 'jomworklah-demo-v1';
 const byId = id => document.getElementById(id);
-const skillIndex = Object.fromEntries(skills.map(skill => [skill.id, skill]));
+let skillIndex = Object.fromEntries(skills.map(skill => [skill.id, skill]));
 const courseIndex = Object.fromEntries(courses.map(course => [course.id, course]));
-const jobIndex = Object.fromEntries(jobs.map(job => [job.id, job]));
+let jobIndex = Object.fromEntries(jobs.map(job => [job.id, job]));
 const hollandIndex = Object.fromEntries(hollandTypes.map(type => [type.code, type]));
 const employerNames = {
   petronas: 'PETRONAS', maybank: 'Maybank', grab: 'Grab', cimb: 'CIMB', touchngo: 'Touch ’n Go', shopee: 'Shopee',
@@ -69,14 +69,27 @@ function emptyJourney() {
 }
 
 const saved = loadDemo();
-const journeys = Object.fromEntries(Object.keys(personas).map(id => [id, emptyJourney()]));
+const demoPersonaKeys = Object.keys(personas);
+const authUser = window.JKL_AUTH_USER || null;
+if (authUser) {
+  const metadataName = authUser.user_metadata?.full_name;
+  const accountName = String(metadataName || authUser.email?.split('@')[0] || 'New User').slice(0, 70);
+  personas.account = {
+    name: accountName, headline: 'Your candidate profile', photo: null,
+    qualification: 'Other', field: '', experience: '', projects: '', location: '',
+    budget: 'Flexible', hours: 5, mode: 'Online', interests: [], mbti: null, holland: [],
+    scores: Object.fromEntries(skills.map(skill => [skill.id, 0]))
+  };
+}
+const personaKeys = [...demoPersonaKeys, ...(authUser ? ['account'] : [])];
+const journeys = Object.fromEntries(personaKeys.map(id => [id, emptyJourney()]));
 const state = {
-  view: 'welcome',
-  persona: Object.hasOwn(personas, saved.persona) ? saved.persona : 'aina',
+  view: authUser ? 'upload' : 'welcome',
+  persona: authUser ? 'account' : (demoPersonaKeys.includes(saved.persona) ? saved.persona : 'aina'),
   profiles: Object.fromEntries(Object.entries(personas).map(([id, persona]) => [id, {
     ...persona, ...saved.extras?.[id], scores: { ...persona.scores }
   }])),
-  file: null, fileError: '', processing: false, generation: false,
+  file: null, uploadFile: null, fileError: '', processing: false, generation: false,
   skillCategory: 'All', radarSkill: null, careerSearch: '', careerCategory: 'All', careerSort: 'match',
   training: { view: 'suggested', skill: 'All', level: 'All', search: '', limit: 24, location: 'All', budget: 'All', sort: 'relevance' }
 };
@@ -111,23 +124,31 @@ function saveTokens() {
 
 // Calls an authenticated endpoint for a persona; an expired token is forgotten.
 async function call(method, path, body, personaId = state.persona) {
-  const token = tokens[personaId];
+  const token = personaId === 'account' ? window.JKL_AUTH_TOKEN : tokens[personaId];
   try {
     return await (method === 'get' || method === 'delete'
       ? jklApi[method](path, { token })
       : jklApi[method](path, body, { token }));
   } catch (error) {
     if (error.status === 401) {
-      delete tokens[personaId];
-      delete hydrated[personaId];
-      saveTokens();
-      error.message = 'Your demo session expired. Reload the page to start a new one.';
+      if (personaId === 'account') {
+        error.message = 'Your account session expired. Sign in again to continue.';
+      } else {
+        delete tokens[personaId];
+        delete hydrated[personaId];
+        saveTokens();
+        error.message = 'Your demo session expired. Reload the page to start a new one.';
+      }
     }
     throw error;
   }
 }
 
 async function ensureSession(personaId) {
+  if (personaId === 'account') {
+    if (!window.JKL_AUTH_TOKEN) throw new Error('Your account session is unavailable. Sign in again to continue.');
+    return (await jklApi.get('/me', { token: window.JKL_AUTH_TOKEN })).data;
+  }
   if (tokens[personaId]) {
     try {
       return (await jklApi.get('/me', { token: tokens[personaId] })).data;
@@ -174,8 +195,8 @@ async function hydratePersona(personaId) {
   const me = await ensureSession(personaId);
   const legacyProfile = state.profiles[personaId];
   const personalityMigration = {};
-  if (me.profile.mbti == null && legacyProfile.mbti) personalityMigration.mbti = legacyProfile.mbti;
-  if (me.profile.holland == null && Array.isArray(legacyProfile.holland)) {
+  if (personaId !== 'account' && me.profile.mbti == null && legacyProfile.mbti) personalityMigration.mbti = legacyProfile.mbti;
+  if (personaId !== 'account' && me.profile.holland == null && Array.isArray(legacyProfile.holland)) {
     personalityMigration.holland = legacyProfile.holland;
   }
   applyMe(personaId, me);
@@ -191,7 +212,42 @@ async function hydratePersona(personaId) {
     }
   }
   if (me.journey.roadmap) await loadRoadmap(personaId);
+  await loadCareers(personaId);
   hydrated[personaId] = true;
+}
+
+async function loadReferenceData() {
+  try {
+    const [skillResponse, interestResponse] = await Promise.all([
+      jklApi.get('/skills'),
+      jklApi.get('/interests')
+    ]);
+    if (Array.isArray(skillResponse.data?.skills) && skillResponse.data.skills.length) {
+      skills.splice(0, skills.length, ...skillResponse.data.skills);
+      skillIndex = Object.fromEntries(skills.map(skill => [skill.id, skill]));
+    }
+    if (interestResponse.data && typeof interestResponse.data === 'object') {
+      Object.assign(interests, interestResponse.data);
+    }
+  } catch (error) {
+    console.warn('[jomworklah] Using fixture skill and interest data:', error.message);
+  }
+}
+
+async function loadCareers(personaId = state.persona) {
+  try {
+    const { data } = await call('get', '/careers?sort=match', undefined, personaId);
+    if (!Array.isArray(data) || !data.length) return;
+    jobs.splice(0, jobs.length, ...data.map(job => ({
+      ...job,
+      __fromApi: true,
+      project: job.projects ?? job.project ?? []
+    })));
+    jobIndex = Object.fromEntries(jobs.map(job => [job.id, job]));
+  } catch (error) {
+    console.warn('[jomworklah] Using fixture career data:', error.message);
+  }
+  if (['careers', 'dashboard', 'gap'].includes(state.view)) draw();
 }
 
 // ── Course catalogue (loaded from the API; Supabase is the source) ──
@@ -270,8 +326,10 @@ function refreshCatalogueViews() {
 function persist() {
   try {
     // Keep a browser copy for migration/offline recovery; Supabase is the persisted profile source.
-    const extras = Object.fromEntries(Object.entries(state.profiles).map(([id, p]) => [id, { mbti: p.mbti, holland: p.holland }]));
-    localStorage.setItem(storageKey, JSON.stringify({ version: 2, persona: state.persona, extras }));
+    const extras = Object.fromEntries(demoPersonaKeys.map(id => [id, {
+      mbti: state.profiles[id].mbti, holland: state.profiles[id].holland
+    }]));
+    localStorage.setItem(storageKey, JSON.stringify({ version: 2, persona: demoPersonaKeys.includes(state.persona) ? state.persona : saved.persona, extras }));
   } catch {
     // The prototype also works in browsers that block file-origin storage.
   }
@@ -286,12 +344,13 @@ function icon(name, size = 20) {
 }
 
 function mbtiType(code) {
-  return mbtiTypes.find(type => type.code === code) || mbtiTypes[0];
+  return mbtiTypes.find(type => type.code === code) || null;
 }
 
 // 16-type illustrations extracted from the supplied 16personalities chart (assets/mbti).
 function mbtiAvatar(code, size = 44) {
   const type = mbtiType(code);
+  if (!type) return '';
   const height = Math.round(size * 158 / 176);
   return `<img class="mbti-avatar" src="assets/mbti/${type.code.toLowerCase()}.png" width="${size}" height="${height}" alt="" loading="lazy" decoding="async">`;
 }
@@ -304,6 +363,9 @@ function personaPhoto(id, size = 30) {
 }
 
 function mbtiSummary(type) {
+  if (!type) {
+    return '<div class="mbti-current"><div><p class="label">Selected type</p><h3>Not selected</h3><p>Choose an MBTI type below if you want to include it in your profile.</p></div></div>';
+  }
   const group = mbtiGroups[type.group];
   return `<div class="mbti-current" style="--mbti-color:${group.color};--mbti-soft:${group.soft}">
     ${mbtiAvatar(type.code, 86)}
@@ -420,13 +482,18 @@ function go(view) {
 function shell() {
   const landing = state.view === 'welcome';
   const workspace = !onboardingViews.includes(state.view);
+  const accountMode = state.persona === 'account';
   const logo = '<img src="assets/jomworklah-logo.svg" alt="JomWorkLah" width="187" height="42">';
   const links = nav.map(([id, label, mark]) => `<button type="button" class="nav-link${id === state.view ? ' selected' : ''}" data-action="go" data-value="${id}" ${id === state.view ? 'aria-current="page"' : ''}>${icon(mark, 19)}${label}</button>`).join('');
   byId('header').innerHTML = `<div class="header-inner content-width flex items-center justify-between">
     <button class="brand" type="button" data-action="go" data-value="welcome">${logo}</button>
-    ${landing ? `<nav class="landing-nav flex items-center" aria-label="Main navigation"><a href="#why-it-matters" data-action="landing-section" data-value="why-it-matters">Why it matters</a><a href="#how-it-works" data-action="landing-section" data-value="how-it-works">How it works</a><a class="emp-entry" href="/employer">For employers</a>${button('Explore demo', 'persona', { style: 'plain', mark: 'external' })}</nav>` :
+    ${landing ? `<nav class="landing-nav flex items-center" aria-label="Main navigation"><a href="#why-it-matters" data-action="landing-section" data-value="why-it-matters">Why it matters</a><a href="#how-it-works" data-action="landing-section" data-value="how-it-works">How it works</a><a class="emp-entry" href="/employer">For employers</a>${authUser ? '<a href="/candidate#upload">My workspace</a><button type="button" class="button button-plain" data-action="sign-out">Sign out</button>' : '<a href="/login">Sign in</a><a class="button button-secondary" href="/signup">Create account</a>'}${button('Explore demo', 'persona', { style: 'plain', mark: 'external' })}</nav>` :
+      accountMode ? `<div class="header-actions"><span class="account-tag">${escapeHTML(profile().name.split(' ')[0])}</span>
+        <button type="button" class="button button-secondary" data-action="sign-out">Sign out</button>
+        ${workspace ? `<button class="icon-button mobile-menu" type="button" data-action="menu" aria-label="Open navigation">${icon('menu')}</button>` : ''}</div>` :
       `<div class="header-actions"><span class="demo-tag"><span class="orange-dot"></span>Demo mode</span>
         <button type="button" class="button button-secondary persona-chip" data-action="persona" aria-label="Change demo persona">${personaPhoto(state.persona, 30)}<span>${escapeHTML(personas[state.persona].name.split(' ')[0])} · Demo</span>${icon('down', 17)}</button>
+        ${authUser ? '<a class="header-account-link" href="/candidate#upload">My account</a><button type="button" class="button button-plain" data-action="sign-out">Sign out</button>' : ''}
         ${workspace ? `<button class="icon-button mobile-menu" type="button" data-action="menu" aria-label="Open navigation">${icon('menu')}</button>` : ''}</div>`}
     </div>`;
   byId('shell').className = workspace ? 'shell workspace' : 'shell';
@@ -464,8 +531,8 @@ function landingView() {
         <p class="eyebrow"><span class="orange-dot"></span>Malaysia’s career navigator</p>
         <h1>Your skills have<br class="hero-break"> a future. <em>Jom find it.</em></h1>
         <p class="lede">Discover your strengths, explore Malaysian career paths and make a plan for what to learn next.</p>
-        <div class="hero-actions">${goButton('Analyse My Resume', 'upload')}${button('Try with Demo Profile', 'persona', { style: 'secondary', mark: 'play' })}</div>
-        ${notice('Prototype only. Your uploaded file stays on your device and is never read.', 'lock')}
+        <div class="hero-actions"><a class="button button-primary" href="${authUser ? '/candidate#upload' : '/signup'}">${authUser ? 'Analyse My Resume' : 'Create an Account' }${icon('arrow', 17)}</a>${button('Try with Demo Profile', 'persona', { style: 'secondary', mark: 'play' })}</div>
+        ${notice('Demo files are never uploaded. Account resumes are analysed, extracted details are saved to your account, and the original file is discarded.', 'lock')}
       </div>
       <figure class="hero-figure">
         <div class="hero-map"><img src="assets/hero-technician.webp" alt="A student assembling a robotics kit beside a laptop showing training, campus and career paths" width="1100" height="825" fetchpriority="high"></div>
@@ -501,7 +568,7 @@ function landingView() {
     <section class="features content-width" id="how-it-works" tabindex="-1" aria-labelledby="features-title">
       <p class="label">How it works</p>
       <h2 id="features-title">Five steps from resume to roadmap</h2>
-      <p class="lede">The demo uses sample profiles to show how the planned journey works, from skills assessment to career matches based on Malaysian labour-market data.</p>
+      <p class="lede">Explore with a sample profile, or create an account to build and save your own skills roadmap using Malaysian career data.</p>
       <ol class="feature-grid">${steps.map(([mark, heading, description], index) => `<li class="panel feature"><div class="feature-top"><span class="tile-icon">${icon(mark, 20)}</span><span class="label">Step ${index + 1}</span></div><h3>${heading}</h3><p>${description}</p></li>`).join('')}</ol>
       ${button('Explore demo', 'persona', { mark: 'arrow' })}
     </section>
@@ -509,32 +576,35 @@ function landingView() {
 }
 
 function uploadView() {
+  const accountMode = state.persona === 'account';
   return `<div class="onboarding content-width narrow">
     ${goButton('Back to welcome', 'welcome', 'plain', 'back')}
-    ${title('Resume upload', 'Start with a resume', 'Upload a PDF or DOCX file to generate a sample skills profile.')}
+    ${title('Resume upload', accountMode ? 'Build your profile from a resume' : 'Start with a resume', accountMode ? 'Upload a PDF or DOCX file to extract your experience and skills into your account.' : 'Upload a PDF or DOCX file to generate a sample skills profile.')}
     <section class="panel upload-panel">
       <label id="dropzone" class="dropzone" for="resume-file">
         <input id="resume-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="sr-only" aria-describedby="upload-status upload-note" ${state.processing ? 'disabled' : ''}>
         <span class="tile-icon">${icon('upload', 24)}</span>
         <strong>Drop your resume here or browse files</strong><span>PDF or DOCX · Up to 5 MB</span>
       </label>
-      <div id="upload-status" aria-live="polite">${state.fileError ? `<p class="error">${escapeHTML(state.fileError)}</p>` : ''}${state.file ? `<div class="selected-file flex items-center">${icon('file')}<div><strong>${escapeHTML(state.file.name)}</strong><span>${state.file.size} · ${state.processing ? 'Preparing example' : 'Ready to analyse'}</span></div>${button('Remove', 'remove-file', { style: 'plain', attrs: state.processing ? 'disabled' : '' })}</div>` : ''}</div>
+      <div id="upload-status" aria-live="polite">${state.fileError ? `<p class="error">${escapeHTML(state.fileError)}</p>` : ''}${state.file ? `<div class="selected-file flex items-center">${icon('file')}<div><strong>${escapeHTML(state.file.name)}</strong><span>${state.file.size} · ${state.processing ? (accountMode ? 'Analysing resume' : 'Preparing example') : 'Ready to analyse'}</span></div>${button('Remove', 'remove-file', { style: 'plain', attrs: state.processing ? 'disabled' : '' })}</div>` : ''}</div>
       <div class="button-row">
-        ${button('Generate Demo Skills Profile', 'process-resume', { mark: 'arrow', attrs: state.file && !state.processing ? '' : 'disabled' })}
-        ${button('Use Sample Resume (Aina)', 'sample-resume', { style: 'secondary', attrs: state.processing ? 'disabled' : '' })}
+        ${button(accountMode ? 'Analyse Resume' : 'Generate Demo Skills Profile', 'process-resume', { mark: 'arrow', attrs: state.file && !state.processing ? '' : 'disabled' })}
+        ${accountMode ? '' : button('Use Sample Resume (Aina)', 'sample-resume', { style: 'secondary', attrs: state.processing ? 'disabled' : '' })}
       </div>
-      <p id="processing-message" class="loading-message" role="status" ${state.processing ? '' : 'hidden'}>${state.processing ? 'Demo simulation · Preparing a sample skills profile…' : ''}</p>
+      <p id="processing-message" class="loading-message" role="status" ${state.processing ? '' : 'hidden'}>${state.processing ? (accountMode ? 'Analysing your resume securely…' : 'Demo simulation · Preparing a sample skills profile…') : ''}</p>
     </section>
-    <div id="upload-note">${notice('The demo uses a prewritten sample profile. Choosing a file shares its name and size with this page for this session.', 'lock')}</div>
+    <div id="upload-note">${notice(accountMode ? 'Your resume is sent to our backend and DeepSeek for extraction, then discarded. Extracted profile details and skills are saved to your account; the original file is not stored.' : 'The demo uses a prewritten sample profile. Choosing a file shares its name and size with this page for this session.', 'lock')}</div>
   </div>`;
 }
 
 function profileFields() {
   const p = profile();
+  const selectedType = mbtiType(p.mbti);
+  const accountMode = state.persona === 'account';
   return `<section class="panel form-panel">
-    <h2>Profile details</h2><p>Use fictional details for this demo. Text fields and skills stay in this session.</p>
+    <h2>Profile details</h2><p>${accountMode ? 'Review and edit your personal details and resume evidence.' : 'Use fictional details for this demo. Text fields and skills stay in this session.'}</p>
     <div class="form-grid">
-      <label class="field"><span>Demo name</span><input name="name" required maxlength="70" value="${escapeHTML(p.name)}"></label>
+      <label class="field"><span>${accountMode ? 'Full name' : 'Demo name'}</span><input name="name" required maxlength="70" value="${escapeHTML(p.name)}"></label>
       ${selectField('qualification', 'Qualification', ['SPM', 'Certificate', 'Diploma', 'Degree', 'Other'], p.qualification)}
       <label class="field full"><span>Field of study</span><input name="field" maxlength="100" value="${escapeHTML(p.field)}"></label>
       <label class="field"><span>Experience summary</span><textarea rows="3" name="experience" maxlength="900">${escapeHTML(p.experience)}</textarea></label>
@@ -552,16 +622,16 @@ function profileFields() {
     <div id="mbti-current">${mbtiSummary(mbtiType(p.mbti))}</div>
     <div id="mbti-grid" class="mbti-grid" role="group" aria-label="Choose an MBTI personality type">${mbtiTypes.map(type => {
       const group = mbtiGroups[type.group];
-      return `<button type="button" class="mbti-option" data-action="mbti" data-value="${type.code}" aria-pressed="${type.code === mbtiType(p.mbti).code}" style="--mbti-color:${group.color};--mbti-soft:${group.soft}">${mbtiAvatar(type.code, 76)}<span><strong>${type.code}</strong><small>${type.name}</small></span></button>`;
+      return `<button type="button" class="mbti-option" data-action="mbti" data-value="${type.code}" aria-pressed="${type.code === selectedType?.code}" style="--mbti-color:${group.color};--mbti-soft:${group.soft}">${mbtiAvatar(type.code, 76)}<span><strong>${type.code}</strong><small>${type.name}</small></span></button>`;
     }).join('')}</div>
     <div class="mbti-test"><a class="button button-secondary" href="https://www.16personalities.com/free-personality-test" target="_blank" rel="noopener noreferrer">Don't know yours? Take the free personality test${icon('arrow', 17)}</a><p>Opens the 16Personalities test (free, about 10 minutes, English and other languages) in a new tab. Come back and pick the matching type above.</p></div>
-    ${notice('Self-reported for this demo. The 16-type framework is a reflection prompt, not a career assessment.')}
+    ${notice(accountMode ? 'Optional and self-reported. The 16-type framework is a reflection prompt, not a career assessment.' : 'Self-reported for this demo. The 16-type framework is a reflection prompt, not a career assessment.')}
   </section>
   <section class="panel form-panel holland-panel">
     <h2>Holland Code (RIASEC)</h2>
     <p>Pick up to three letters in order, strongest interest first (for example I, then R, then C). Roles whose Holland Code is closer to yours rank higher in Explore Careers.</p>
     <div id="holland-body">${hollandBody()}</div>
-    ${notice('Self-reported for this demo. Role codes are illustrative approximations and only a small part of the match score.')}
+    ${notice(accountMode ? 'Optional and self-reported. Role codes are illustrative approximations and only a small part of the match score.' : 'Self-reported for this demo. Role codes are illustrative approximations and only a small part of the match score.')}
   </section>
   <section class="panel form-panel">
     <h2>Career preferences</h2>
@@ -574,17 +644,18 @@ function profileFields() {
     </div>
   </section>
   <section class="panel form-panel">
-    <h2>Resume evidence</h2><p>Choose scores from 0 to 5. Each score represents the type of evidence in this illustrative profile.</p>
+    <h2>Resume evidence</h2><p>${accountMode ? 'Review the skill evidence extracted from your resume and adjust scores as needed.' : 'Choose scores from 0 to 5. Each score represents the type of evidence in this illustrative profile.'}</p>
     <div class="evidence-edit">${skills.map(skill => `<div class="evidence-control"><label for="edit-${skill.id}">${skill.name}<small>${skill.category}</small></label><select id="edit-${skill.id}" name="skill-${skill.id}" aria-describedby="desc-${skill.id}" data-evidence>${selectOptions(evidenceLegend.map((description, value) => [value, value + ' · ' + description]), score(skill.id))}</select><span class="sr-only" id="desc-${skill.id}">${skill.description}</span></div>`).join('')}</div>
-    ${notice('All scores are illustrative, including any sample score of 5.')}
+    ${accountMode ? '' : notice('All scores are illustrative, including any sample score of 5.')}
   </section>`;
 }
 
 function reviewView() {
+  const accountMode = state.persona === 'account';
   return `<div class="onboarding content-width review-width">
     ${goButton(reviewReturn === 'upload' ? 'Back to upload' : 'Back to welcome', reviewReturn, 'plain', 'back')}
-    ${title('Sample profile', 'Review your <em>demo profile.</em>', 'These example experiences and preferences drive the career matches. Adjust anything before continuing.')}
-    <form id="profile-form">${profileFields()}<div class="button-row"><button type="submit" class="button button-primary">Save &amp; Continue${icon('arrow', 17)}</button>${button('Reset to Sample Profile', 'sample-reset', { style: 'secondary' })}</div></form>
+    ${title(accountMode ? 'Your profile' : 'Sample profile', accountMode ? 'Review your <em>resume profile.</em>' : 'Review your <em>demo profile.</em>', accountMode ? 'Check the information extracted from your resume and correct anything before continuing.' : 'These example experiences and preferences drive the career matches. Adjust anything before continuing.')}
+    <form id="profile-form">${profileFields()}<div class="button-row"><button type="submit" class="button button-primary">Save &amp; Continue${icon('arrow', 17)}</button>${accountMode ? '' : button('Reset to Sample Profile', 'sample-reset', { style: 'secondary' })}</div></form>
   </div>`;
 }
 
@@ -627,7 +698,10 @@ function compatibility(job) {
 }
 
 function rankedJobs() {
-  return jobs.map(job => ({ ...job, fit: compatibility(job) })).sort((a, b) => b.fit - a.fit || a.title.localeCompare(b.title));
+  return jobs.map(job => ({
+    ...job,
+    fit: job.__fromApi ? job.fit : compatibility(job)
+  })).sort((a, b) => b.fit - a.fit || a.title.localeCompare(b.title));
 }
 
 function rankedCourses(job) {
@@ -764,7 +838,7 @@ function dashboardView() {
   const best = rankedJobs()[0];
   const job = targetJob();
   const type = mbtiType(profile().mbti);
-  const group = mbtiGroups[type.group];
+  const group = type ? mbtiGroups[type.group] : null;
   const known = skills.filter(skill => score(skill.id) > 0).sort((a, b) => score(b.id) - score(a.id));
   const focus = gapsFor(job).filter(item => item.gap).slice(0, 3);
   const recs = rankedCourses(job || best).filter(item => item.relevance).slice(0, 2);
@@ -776,7 +850,7 @@ function dashboardView() {
     ['route', 'Roadmap completion', progress.percent + '%', 'roadmap', `${progress.done} of ${progress.total} tasks complete`]
   ];
   return `
-    ${title('Overview', 'Hi ' + escapeHTML(profile().name.trim().split(/\s+/)[0]) + ', here is your career overview', 'Your sample skills, the closest career matches and the next steps in your plan.', `<div class="heading-actions"><span class="persona-badge" style="--mbti-soft:${group.soft};--mbti-color:${group.color}" title="MBTI personality: ${type.code} · ${type.name}">${personaPhoto(state.persona, 30)}<span><strong>${type.code}</strong><small>${type.name}</small></span></span>${goButton('Explore Careers', 'careers')}</div>`)}
+    ${title('Overview', 'Hi ' + escapeHTML(profile().name.trim().split(/\s+/)[0]) + ', here is your career overview', state.persona === 'account' ? 'Your skills, career matches and the next steps in your plan.' : 'Your sample skills, the closest career matches and the next steps in your plan.', `<div class="heading-actions">${type ? `<span class="persona-badge" style="--mbti-soft:${group.soft};--mbti-color:${group.color}" title="MBTI personality: ${type.code} · ${type.name}">${personaPhoto(state.persona, 30)}<span><strong>${type.code}</strong><small>${type.name}</small></span></span>` : ''}${goButton('Explore Careers', 'careers')}</div>`)}
     <section class="metric-grid" aria-label="Career summary">${metrics.map(([mark, label, value, view, note]) => `<button type="button" class="panel metric" data-action="go" data-value="${view}"><span class="metric-label"><span class="tile-icon">${icon(mark, 17)}</span>${label}</span><strong>${value}</strong><span>${note}</span></button>`).join('')}</section>
     <div class="dashboard-grid">
       <section class="panel dashboard-panel"><div class="section-head"><h2>Your Skills at a Glance</h2>${goButton('All skills', 'skills', 'plain')}</div>${known.length ? evidenceBars(known.slice(0, 6)) : '<p>Enter evidence in your profile to see your strongest sample skills here.</p>'}</section>
@@ -1102,18 +1176,18 @@ function atlasView() {
 
 function settingsView() {
   const type = mbtiType(profile().mbti);
-  return `${title('My profile', 'Your profile and preferences', 'Edit the sample details that shape your career matches and learning plan.', button('Change Demo Persona', 'persona', { style: 'secondary', mark: 'down' }))}
+  const accountMode = state.persona === 'account';
+  return `${title('My profile', 'Your profile and preferences', accountMode ? 'Edit the details that shape your career matches and learning plan.' : 'Edit the sample details that shape your career matches and learning plan.', accountMode ? '' : button('Change Demo Persona', 'persona', { style: 'secondary', mark: 'down' }))}
     <div class="settings-grid">
       <form id="profile-form">${profileFields()}<button type="submit" class="button button-primary">Save Changes${icon('check', 17)}</button></form>
       <aside class="panel dashboard-panel settings-info">
-        <div class="settings-persona">${personaPhoto(state.persona, 72)}<div><strong>${escapeHTML(profile().name)}</strong><span>${type.code} · ${type.name}</span></div></div>
-        <h2>Demo settings</h2>
-        <dl><dt>Sample persona</dt><dd>${personas[state.persona].name}</dd><dt>MBTI personality</dt><dd>${type.code} · ${type.name} (${mbtiGroups[type.group].label})</dd><dt>Target career</dt><dd>${targetJob()?.title || 'Choose a career in Career Explorer'}</dd><dt>Selected resume</dt><dd>${state.file ? escapeHTML(state.file.name) + ' · This session only' : 'Using a sample profile'}</dd></dl>
-        ${notice('Your profile, target career, saved pathways, roadmap, MBTI and Holland picks are saved on the server for this demo session. The chosen resume file is never stored.', 'lock')}
+        <div class="settings-persona">${personaPhoto(state.persona, 72)}<div><strong>${escapeHTML(profile().name)}</strong><span>${type ? `${type.code} · ${type.name}` : 'MBTI not selected'}</span></div></div>
+        <h2>${accountMode ? 'Account settings' : 'Demo settings'}</h2>
+        <dl>${accountMode ? '' : `<dt>Sample persona</dt><dd>${escapeHTML(profile().name)}</dd>`}<dt>MBTI personality</dt><dd>${type ? `${type.code} · ${type.name} (${mbtiGroups[type.group].label})` : 'Not selected'}</dd><dt>Target career</dt><dd>${targetJob()?.title || 'Choose a career in Career Explorer'}</dd><dt>Selected resume</dt><dd>${state.file ? escapeHTML(state.file.name) + ' · This session only' : accountMode ? 'Original file discarded after processing' : 'Using a sample profile'}</dd></dl>
+        ${notice(accountMode ? 'Your profile, skills, MBTI, Holland Code, target career, saved pathways and roadmap are saved to your account. The original resume is discarded after processing.' : 'Your profile, target career, saved pathways, roadmap, MBTI and Holland picks are saved on the server for this demo session. The chosen resume file is never stored.', 'lock')}
         ${goButton('How scores work', 'skills', 'plain', 'info')}
         ${goButton('Upload New Resume', 'upload', 'plain', 'upload')}
-        ${button('Reset Demo', 'reset-demo', { style: 'secondary' })}
-        ${button('Clear Saved Demo Progress', 'clear-saved', { style: 'secondary' })}
+        ${accountMode ? '<button type="button" class="button button-secondary" data-action="sign-out">Sign out</button>' : `${button('Reset Demo', 'reset-demo', { style: 'secondary' })}${button('Clear Saved Demo Progress', 'clear-saved', { style: 'secondary' })}`}
       </aside>
     </div>`;
 }
@@ -1141,7 +1215,7 @@ function personaPicker() {
     amir: { label: 'Automotive & trades', mark: 'wrench', skills: ['tools', 'auto'] }
   };
   openModal('Choose a <em>demo profile</em>', `<p class="modal-description">Pick a fictional profile to explore a career path and build a learning roadmap.</p>
-    <div class="persona-grid">${Object.entries(personas).map(([id, persona]) => {
+    <div class="persona-grid">${demoPersonaKeys.map(id => [id, personas[id]]).map(([id, persona]) => {
       const path = paths[id];
       return `<button type="button" class="persona-card persona-${id}" data-action="choose-persona" data-value="${id}">
         <span class="persona-path"><span class="persona-icon">${icon(path.mark, 21)}</span><span>${path.label}</span></span>
@@ -1171,7 +1245,10 @@ async function reviewPersona(id, from, keepFile = false) {
   state.persona = id;
   state.processing = false;
   state.generation = false;
-  if (!keepFile) state.file = null;
+  if (!keepFile) {
+    state.file = null;
+    state.uploadFile = null;
+  }
   state.fileError = '';
   state.reviewPending = true;
   reviewReturn = from;
@@ -1195,6 +1272,7 @@ async function reviewPersona(id, from, keepFile = false) {
 function chooseFile(file) {
   if (!file || state.processing) return;
   state.file = null;
+  state.uploadFile = null;
   state.fileError = '';
   if (!/\.(pdf|docx)$/i.test(file.name)) {
     state.fileError = 'Choose a PDF or DOCX file.';
@@ -1203,26 +1281,36 @@ function chooseFile(file) {
   } else {
     const size = file.size >= 1024 * 1024 ? (file.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.ceil(file.size / 1024) + ' KB';
     state.file = { name: file.name, size };
+    state.uploadFile = file;
   }
   draw();
   byId('resume-file').focus({ preventScroll: true });
 }
 
-function simulateResume() {
-  if (!state.file || state.processing) return;
+async function simulateResume() {
+  if (!state.uploadFile || state.processing) return;
   const operation = {};
   state.processing = operation;
   draw();
-  setTimeout(() => {
-    if (state.processing === operation && state.view === 'upload') {
-      byId('processing-message').textContent = 'Demo simulation · Organising evidence and career examples…';
-    }
-  }, 650);
-  setTimeout(() => {
-    if (state.processing !== operation) return;
+  try {
+    if (!tokens[state.persona]) await ensureSession(state.persona);
+    const { data } = await jklApi.upload(
+      '/parse-resume?mode=simulate&persist=true',
+      state.uploadFile,
+      { token: tokens[state.persona] }
+    );
+    const me = await ensureSession(state.persona);
+    applyMe(state.persona, me);
+    await loadCareers(state.persona);
+    state.uploadFile = null;
     state.processing = false;
     if (state.view === 'upload') reviewPersona(state.persona, 'upload', true);
-  }, 1500);
+  } catch (error) {
+    state.processing = false;
+    state.fileError = error.message;
+    if (state.view === 'upload') draw();
+    notify('Could not analyse the demo resume: ' + error.message);
+  }
 }
 
 function resetTraining(view = 'suggested') {
@@ -1272,6 +1360,30 @@ async function addCourse(id) {
   notify(journey().roadmap ? 'Pathway added to your roadmap.' : 'Pathway saved. It will appear when you generate your roadmap.');
 }
 
+async function processAccountResume() {
+  if (!state.uploadFile || state.processing) return;
+  const operation = {};
+  state.processing = operation;
+  draw();
+  try {
+    await jklApi.upload('/parse-resume?mode=live', state.uploadFile, { token: window.JKL_AUTH_TOKEN });
+    state.uploadFile = null;
+    const { data } = await jklApi.get('/me', { token: window.JKL_AUTH_TOKEN });
+    applyMe('account', data);
+    await loadCareers('account');
+    state.processing = false;
+    state.reviewPending = true;
+    reviewReturn = 'upload';
+    go('profile-review');
+    notify('Resume analysed. Review your profile before continuing.');
+  } catch (error) {
+    state.processing = false;
+    state.fileError = error.message;
+    if (state.view === 'upload') draw();
+    notify('Could not analyse your resume: ' + error.message);
+  }
+}
+
 async function makeRoadmap(form) {
   if (state.generation) return;
   const inputs = new FormData(form);
@@ -1314,7 +1426,7 @@ async function saveProfile(form) {
   const info = Object.fromEntries(['name', 'qualification', 'field', 'experience', 'projects'].map(name => [name, input.get(name).trim()]));
   if (!info.name) {
     const nameField = form.elements.namedItem('name');
-    nameField.setCustomValidity('Enter a name for the demo profile.');
+    nameField.setCustomValidity(state.persona === 'account' ? 'Enter your name.' : 'Enter a name for the demo profile.');
     nameField.reportValidity();
     return;
   }
@@ -1325,7 +1437,7 @@ async function saveProfile(form) {
     const { data } = await call('put', '/me/onboarding', {
       ...info, location: preferences.location, budget: preferences.budget, mode: preferences.mode,
       hours: preferences.hours, interests: preferences.interests, scores,
-      mbti: preferences.mbti, holland: preferences.holland
+      ...(preferences.mbti ? { mbti: preferences.mbti } : {}), holland: preferences.holland
     }, personaId);
     applyMe(personaId, data);
   } catch (error) {
@@ -1343,7 +1455,7 @@ async function saveProfile(form) {
 
 async function resetDemo(all) {
   const failures = [];
-  for (const id of Object.keys(personas)) {
+  for (const id of demoPersonaKeys) {
     if (!tokens[id]) continue;
     try {
       await (all ? jklApi.delete('/me', { token: tokens[id] }) : jklApi.delete('/me/journey', { token: tokens[id] }));
@@ -1357,7 +1469,7 @@ async function resetDemo(all) {
     return;
   }
   if (all) {
-    for (const id of Object.keys(personas)) {
+    for (const id of demoPersonaKeys) {
       delete tokens[id];
       delete hydrated[id];
     }
@@ -1369,7 +1481,7 @@ async function resetDemo(all) {
     // Storage can be disabled on local files.
   }
   state.generation = false;
-  for (const id of Object.keys(personas)) {
+  for (const id of demoPersonaKeys) {
     const started = journeys[id].started;
     journeys[id] = emptyJourney();
     if (!all) journeys[id].started = started;
@@ -1378,6 +1490,7 @@ async function resetDemo(all) {
   if (all) {
     state.persona = 'aina';
     state.file = null;
+    state.uploadFile = null;
     state.fileError = '';
     state.processing = false;
     state.reviewPending = false;
@@ -1408,6 +1521,23 @@ const actions = {
   },
   close: () => modal.close(),
   persona: personaPicker,
+  async 'sign-out'() {
+    const supabase = window.JKL_SUPABASE;
+    if (!supabase) {
+      notify('Account sign-out is unavailable. Reload the page and try again.');
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        notify('Could not sign out: ' + error.message);
+        return;
+      }
+      window.location.assign('/candidate');
+    } catch (error) {
+      notify('Could not sign out: ' + error.message);
+    }
+  },
   'choose-persona'(id) {
     if (!onboardingViews.includes(state.view) && id === state.persona) {
       modal.close();
@@ -1417,10 +1547,12 @@ const actions = {
   },
   'remove-file'() {
     state.file = null;
+    state.uploadFile = null;
+    state.fileError = '';
     draw();
     byId('resume-file').focus({ preventScroll: true });
   },
-  'process-resume': simulateResume,
+  'process-resume': () => state.persona === 'account' ? processAccountResume() : simulateResume(),
   'sample-resume': () => reviewPersona('aina', 'upload'),
   async 'sample-reset'() {
     try {
@@ -1633,8 +1765,8 @@ window.addEventListener('popstate', () => {
 });
 // Landing needs no data; a deep link waits for the server copy of the persona so it can route correctly.
 async function boot() {
-  const wanted = location.hash.slice(1);
-  if (wanted && wanted !== 'welcome') {
+  let wanted = location.hash.slice(1);
+  if ((wanted && wanted !== 'welcome') || (state.persona === 'account' && !wanted)) {
     main.innerHTML = '<p class="loading-message" role="status" style="padding:2rem">Loading your workspace…</p>';
     try {
       await hydratePersona(state.persona);
@@ -1642,7 +1774,16 @@ async function boot() {
       notify('Could not reach the server: ' + error.message);
     }
   }
+  if (!wanted) {
+    wanted = state.persona === 'account'
+      ? (journey().started ? 'dashboard' : 'upload')
+      : 'welcome';
+  }
+  if (state.persona === 'account' && !journey().started && !onboardingViews.includes(wanted) && wanted !== 'welcome') {
+    wanted = 'upload';
+  }
   showView(wanted, false);
+  await loadReferenceData();
   loadCatalogue();
 }
 boot();

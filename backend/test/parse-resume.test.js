@@ -227,6 +227,33 @@ test('live mode normalises the DeepSeek result and persists profile and skills',
   assert.equal(evidence.sql, 4, 'work evidence earns demonstrated-in-substantial-work');
 });
 
+test('registered Supabase users can parse resumes into their own account profile', async t => {
+  const stub = makeDeepSeekStub({ extraction: messyExtraction });
+  const supabaseAuth = {
+    auth: {
+      async getUser(token) {
+        return token === 'registered-token'
+          ? { data: { user: { id: 'auth-user-resume', user_metadata: { full_name: 'Account Holder' } } }, error: null }
+          : { data: { user: null }, error: { status: 401 } };
+      }
+    }
+  };
+  const ctx = await makeTestApp({}, { deepseek: stub.client, supabaseAuth });
+  t.after(() => ctx.close());
+
+  const result = await upload(ctx.base, 'registered-token', {
+    file: { name: 'candidate-resume.pdf', type: 'application/pdf', data: PDF }
+  }, '?mode=live');
+  assert.equal(result.status, 200);
+  assert.equal(result.body.data.saved.persisted, true);
+
+  const me = await api(ctx.base, 'GET', '/api/me', { token: 'registered-token' });
+  assert.equal(me.body.data.user.id, 'auth-user-resume');
+  assert.equal(me.body.data.user.kind, 'registered');
+  assert.equal(me.body.data.profile.name, 'Aina Rahman');
+  assert.equal(stub.calls.extractions.length, 1);
+});
+
 test('DeepSeek failures return an error instead of simulated data', async t => {
   const failing = makeDeepSeekStub({ extractionFails: true });
   const ctx = await makeTestApp({}, { deepseek: failing.client });

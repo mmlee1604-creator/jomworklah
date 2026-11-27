@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { AppError } from '../middleware/errors.js';
 import {
   addCourse,
   clearJourney,
@@ -65,6 +66,9 @@ export function roadmapRouter() {
   });
 
   router.delete('/me', async (req, res) => {
+    if (req.user.kind === 'registered') {
+      throw new AppError(403, 'ACCOUNT_DELETION_UNSUPPORTED', 'Registered accounts cannot be deleted through this endpoint.');
+    }
     await deleteUser(req.app.locals.db, req.user.id);
     res.status(204).end();
   });

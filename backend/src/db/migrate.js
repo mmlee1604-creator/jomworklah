@@ -254,6 +254,26 @@ const migrations = [
       );
       ALTER TABLE profiles ADD COLUMN holland_codes_json TEXT;
     `
+  },
+  {
+    version: 6,
+    name: 'registered-users',
+    rebuildUsers: true,
+    sql: `
+      CREATE TABLE users_new (
+        id          TEXT PRIMARY KEY,
+        kind        TEXT NOT NULL DEFAULT 'guest'
+                    CHECK (kind IN ('guest','demo_template','demo_clone','registered')),
+        persona_key TEXT UNIQUE,
+        created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        source_persona TEXT
+      );
+      INSERT INTO users_new(id, kind, persona_key, created_at, updated_at, source_persona)
+        SELECT id, kind, persona_key, created_at, updated_at, source_persona FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `
   }
 ];
 
@@ -272,7 +292,7 @@ export function migrate(db) {
     // SQLite table rebuild: disable FK enforcement outside the transaction,
     // preserve referencing tables, then check integrity before committing.
     const foreignKeys = db.prepare('PRAGMA foreign_keys').get().foreign_keys;
-    if (migration.rebuildCourses) db.exec('PRAGMA foreign_keys = OFF');
+    if (migration.rebuildCourses || migration.rebuildUsers) db.exec('PRAGMA foreign_keys = OFF');
     try {
       transaction(db, () => {
         db.exec(migration.sql);
@@ -282,7 +302,7 @@ export function migrate(db) {
         db.prepare('INSERT INTO schema_migrations(version) VALUES(?)').run(migration.version);
       });
     } finally {
-      if (migration.rebuildCourses && foreignKeys) db.exec('PRAGMA foreign_keys = ON');
+      if ((migration.rebuildCourses || migration.rebuildUsers) && foreignKeys) db.exec('PRAGMA foreign_keys = ON');
     }
   }
 

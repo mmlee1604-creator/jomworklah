@@ -55,12 +55,14 @@ function rateLimiter({ perMinute }) {
 export function createApp({
   db,
   config,
+  supabaseAuth = null,
   ai = createAiAdapter(config),
   deepseek = config.deepseek.apiKey ? createDeepSeekOcrClient(config.deepseek) : null
 }) {
   const app = express();
   app.locals.db = db;
   app.locals.config = config;
+  app.locals.supabaseAuth = supabaseAuth;
   app.locals.ai = ai;
   app.locals.deepseek = deepseek;
 

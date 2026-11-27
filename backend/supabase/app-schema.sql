@@ -8,12 +8,15 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS users (
   id            text PRIMARY KEY,
   kind          text NOT NULL DEFAULT 'guest'
-                CHECK (kind IN ('guest', 'demo_template', 'demo_clone')),
+                CHECK (kind IN ('guest', 'demo_template', 'demo_clone', 'registered')),
   persona_key   text UNIQUE,
   source_persona text,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_kind_check;
+ALTER TABLE users ADD CONSTRAINT users_kind_check
+  CHECK (kind IN ('guest', 'demo_template', 'demo_clone', 'registered'));
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash    text PRIMARY KEY,

@@ -112,7 +112,7 @@ CREATE TABLE schema_migrations (
 CREATE TABLE users (
   id          TEXT PRIMARY KEY,
   kind        TEXT NOT NULL DEFAULT 'guest'
-              CHECK (kind IN ('guest','demo_template','demo_clone')),
+              CHECK (kind IN ('guest','demo_template','demo_clone','registered')),
   persona_key TEXT UNIQUE,          -- 'aina' | 'amir' on templates only
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))

@@ -148,7 +148,7 @@ flowchart LR
 
 | Step | What the AI does | In the app |
 |---|---|---|
-| **1 · Skills assessment** | Parses the resume and the user's own description of their experience into evidence-backed competencies — including skills picked up from hobbies, informal work and self-teaching. | Resume upload → *Review your demo profile* |
+| **1 · Skills assessment** | Parses a signed-in user's resume and experience into evidence-backed competencies — including skills picked up from hobbies, informal work and self-teaching. | Resume upload → *Review your profile* (or explore with a demo profile) |
 | **2 · Career matching** | Ranks Malaysian career paths by fit and **explains why** each one suits the user, instead of just outputting a list. | *Explore Careers* with fit rings and plain-language reasoning |
 | **3 · Gap analysis** | Subtracts current evidence from the role's weighted requirements and orders what is missing by how much it matters. | *Skill Gap* with *Where to start* |
 | **4 · TVET recommendations** | Matches gaps to real Malaysian TVET programmes from the national TVET portal, searchable by state, qualification type and tuition status, showing the institutions that offer each one and linking to the official listing. | *Upskilling Hub* |
@@ -332,7 +332,9 @@ Set these values in `backend/.env` and restart the backend:
 These replace the old `DASHSCOPE_API_KEY` and `QWEN_*` settings. Use `?mode=live` to
 require real extraction; missing credentials and provider failures return errors.
 The independent `AI_*` settings still control narrative assessment and career explanations.
-The candidate app's resume upload step is still simulated; it does not call `POST /api/parse-resume` yet.
+The demo upload remains simulated. Signed-in candidates send their PDF/DOCX to
+`POST /api/parse-resume?mode=live`; the extracted profile and skills are saved, and the original
+file is not retained.
 
 ### Supabase database
 
@@ -367,13 +369,29 @@ npm run supabase:seed:generate
 
 1. In Supabase, get the PostgreSQL connection string (use the transaction pooler where appropriate)
    and set it as `DATABASE_URL` in `backend/.env`, then run `npm run db:migrate` and `npm run db:seed`.
-2. Deploy the repository's `render.yaml` blueprint. In Render, set `DATABASE_URL`,
-   `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` to the Supabase values. `FRONTEND_ORIGIN`
-   defaults to the production Vercel site; add preview or custom frontend origins as needed. Do not
-   expose the database URL or service-role key to the browser.
-3. Create a Vercel project rooted at `frontend/`. The frontend defaults to
-   `https://jomworklah.onrender.com/api`; set `NEXT_PUBLIC_API_BASE` to override it and deploy.
-4. Confirm the Render health endpoint at `https://your-api.onrender.com/api/health`.
+   For an existing Supabase app database, reapply `backend/supabase/app-schema.sql` to allow
+   registered users; the SQL is safe to reapply.
+2. In Supabase Authentication, enable Email/Password and add the frontend origin and
+   `https://your-frontend.vercel.app/candidate` to the allowed redirect URLs. Choose whether email
+   confirmation is required in the Supabase Auth settings.
+3. Deploy the repository's `render.yaml` blueprint. In Render, set `DATABASE_URL`,
+   `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` to the Supabase values. Set `DEEPSEEK_API_KEY`
+   to enable real resume parsing. `FRONTEND_ORIGIN` defaults to the production Vercel site; add
+   preview or custom frontend origins as needed. Do not expose the database URL or service-role
+   key to the browser.
+4. Create a Vercel project rooted at `frontend/`. Set `NEXT_PUBLIC_SUPABASE_URL` and
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY` to the Supabase project URL and publishable/anon key, and set
+   `NEXT_PUBLIC_API_BASE` if overriding the default `https://jomworklah.onrender.com/api`. These
+   public values are embedded at build time; use the same public values in `frontend/.env.local`
+   for local development and never use the service-role key in Vercel.
+5. Confirm the Render health endpoint at `https://your-api.onrender.com/api/health`, then deploy
+   the frontend.
+
+Candidate accounts use Supabase email/password authentication and receive their own profile,
+skills, preferences and roadmap. The original resume is sent to the backend for extraction and is
+not stored; the extracted profile and skills are saved to the account. Live resume parsing requires
+`DEEPSEEK_API_KEY`. If email confirmation is enabled, users must confirm their email before signing
+in.
 
 For Vercel preview deployments, add their origins to the comma-separated `FRONTEND_ORIGIN` allowlist
 if you need previews to call the API.
@@ -431,9 +449,11 @@ API reads the Supabase catalogue cache; it does not serve rows from this local d
 
 ## 8. API Reference
 
-Base path `/api`. JSON in and out, except the multipart resume upload. Auth is a bearer token from
-`POST /api/session` or `POST /api/demo/session`; there are no passwords, and every user row is
-hard-deleted by `DELETE /api/me`.
+Base path `/api`. JSON in and out, except the multipart resume upload. Protected routes accept
+either a demo bearer token from `POST /api/session` or `POST /api/demo/session`, or a Supabase
+email/password access token. The API verifies Supabase tokens and provisions an isolated candidate
+profile on first use. Supabase Auth handles passwords; they are not stored in the application
+database. `DELETE /api/me` is limited to demo users; it does not delete Supabase Auth accounts.
 
 Responses use one envelope: `{ "data": ... , "meta": ... }` or `{ "error": { "code", "message", "details" } }`.
 
@@ -460,7 +480,7 @@ Responses use one envelope: `{ "data": ... , "meta": ... }` or `{ "error": { "co
 | `GET` `POST` | `/me/roadmap` | ✔ | derive, generate or regenerate the plan |
 | `PATCH` | `/me/roadmap/tasks/:taskId` | ✔ | toggle a task |
 | `POST` | `/me/roadmap/reset-progress` | ✔ | clear completions, keep the plan |
-| `DELETE` | `/me/journey` · `/me` | ✔ | clear the journey · delete everything |
+| `DELETE` | `/me/journey` · `/me` | ✔ | clear the journey · delete demo user data (registered accounts are blocked) |
 | `POST` | `/parse-resume?mode=&persist=` | ✔ | multipart PDF/DOCX → structured profile + skill evidence |
 | `POST` | `/ai/assessment` | ✔ | free-text narrative → detected skills and interests |
 | `POST` | `/ai/explain-match` | ✔ | plain-language justification for a match |
@@ -623,7 +643,7 @@ memory, so nothing personal is uploaded during the demo.
 cd backend && npm test
 ```
 
-**80 tests, 0 failures.** They run against in-memory SQLite and a built-in 10-course fixture (never a live Supabase project) and cover behavior that could otherwise drift
+**84 tests, 0 failures.** They run against in-memory SQLite and a built-in 10-course fixture (never a live Supabase project) and cover behavior that could otherwise drift
 silently:
 
 | Suite | Guards |
@@ -631,7 +651,7 @@ silently:
 | `scoring.test.js` | Aina→Junior Data Analyst `fit=61`, Amir→Automotive `fit=77`, gap ordering, interest-match branch, rounding at boundaries, evidence caps |
 | `roadmap.test.js` | week formula at 3/5/8 hours, fallback tasks, stable IDs, saved-course union, completions preserved on regeneration, orphan pruning |
 | `seed.test.js` | idempotent reruns, weights sum to 1, foreign-key integrity, expected catalogue counts |
-| `api.test.js` + `parse-resume.test.js` | session bootstrap, validation and auth failures, upload type and size rejection |
+| `api.test.js` + `parse-resume.test.js` + `migrate.test.js` | demo and Supabase auth, account isolation, migration preservation, upload validation and account resume parsing |
 | `deepseek-ocr.test.js` | PDF/DOCX multipart OCR, structured extraction, environment settings, provider errors and incomplete output (mocked provider; no paid API calls) |
 | `import-tvet.test.js` | schema migration preserves references, imports are repeatable and atomic, missing data stays unknown, imported course shapes work in training and roadmaps using an injected test catalogue |
 
@@ -677,8 +697,8 @@ The pitch is stronger when the numbers are trustworthy, so the boundaries are st
 - **Holland Code is self-reported.** Picks are saved with the Supabase profile, but role codes remain illustrative approximations rather than an official O*NET lookup, and the 70/15/15 weighting is a design choice. The external O*NET test is English only and its result is entered by hand.
 - **Skills Atlas mixes real and synthetic data.** State and district geometry comes from official DOSM/open data; supply, demand, gap, employer and institution figures are synthetic and labelled "Demo data".
 - **No job-board ingestion yet** — careers and their requirements are curated seed data. Only the TVET programmes come from a real export.
-- **The candidate app depends on the API for profiles and saved progress, but not for everything.** Career matching still runs in the browser; MBTI and Holland selections are persisted to the profile in Supabase. Resume upload is simulated, and the employer site is still mock data. If the API is down the Upskilling Hub shows an error.
-- Privacy is minimal by design: no email, no passwords, no server-side resume retention after parsing.
+- **The candidate app depends on the API for profiles and saved progress, but not for everything.** Career matching still runs in the browser; MBTI and Holland selections are persisted to the profile in Supabase. Demo resume upload is simulated; registered accounts use live parsing. The employer site is still mock data. If the API is down the Upskilling Hub shows an error.
+- Supabase Auth manages account email/password credentials. The app database stores the account ID and candidate profile, not a copy of the password or original resume.
 
 ### Data sources the product is built to use
 

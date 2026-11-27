@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { transaction } from '../db/connection.js';
+import { AppError } from '../middleware/errors.js';
 
 export function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -13,6 +14,33 @@ export async function createUser(db, { kind = 'guest' } = {}) {
     await tx.prepare('INSERT INTO journeys(user_id, started) VALUES(?, 0)').run(id);
   });
   return id;
+}
+
+export async function ensureRegisteredUser(db, authUser) {
+  const name = String(authUser.user_metadata?.full_name ?? '').trim().slice(0, 70) || 'New User';
+
+  await transaction(db, async tx => {
+    await tx.prepare(`
+      INSERT INTO users(id, kind) VALUES(?, 'registered')
+      ON CONFLICT(id) DO NOTHING
+    `).run(authUser.id);
+
+    const user = await tx.prepare('SELECT kind FROM users WHERE id = ?').get(authUser.id);
+    if (user?.kind !== 'registered') {
+      throw new AppError(409, 'ACCOUNT_CONFLICT', 'This authentication account is already linked to a different profile.');
+    }
+
+    await tx.prepare(`
+      INSERT INTO profiles(user_id, name) VALUES(?, ?)
+      ON CONFLICT(user_id) DO NOTHING
+    `).run(authUser.id, name);
+    await tx.prepare(`
+      INSERT INTO journeys(user_id, started) VALUES(?, 0)
+      ON CONFLICT(user_id) DO NOTHING
+    `).run(authUser.id);
+  });
+
+  return { id: authUser.id, kind: 'registered', personaKey: null };
 }
 
 export async function issueToken(db, userId, { expiresAt = null } = {}) {

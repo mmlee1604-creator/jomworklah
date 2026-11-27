@@ -16,12 +16,13 @@ test('production frontend origin is allowed alongside configured preview origins
     headers: {
       origin: 'https://jomworklah-two.vercel.app',
       'access-control-request-method': 'POST',
-      'access-control-request-headers': 'content-type'
+      'access-control-request-headers': 'content-type, authorization'
     }
   });
 
   assert.equal(response.status, 204);
   assert.equal(response.headers.get('access-control-allow-origin'), 'https://jomworklah-two.vercel.app');
+  assert.match(response.headers.get('access-control-allow-headers'), /authorization/i);
 });
 
 test('health and public catalogue are available without auth', async t => {
@@ -68,6 +69,49 @@ test('session bootstrap creates a guest and requires auth elsewhere', async t =>
   assert.equal(me.status, 200);
   assert.equal(me.body.data.user.kind, 'guest');
   assert.equal(me.body.data.skills.length, 18);
+});
+
+test('Supabase access tokens provision isolated registered candidate profiles', async t => {
+  const users = new Map([
+    ['token-one', { id: 'auth-user-one', user_metadata: { full_name: 'Candidate One' } }],
+    ['token-two', { id: 'auth-user-two', user_metadata: { full_name: 'Candidate Two' } }]
+  ]);
+  const supabaseAuth = {
+    auth: {
+      async getUser(token) {
+        const user = users.get(token);
+        return user
+          ? { data: { user }, error: null }
+          : { data: { user: null }, error: { status: 401 } };
+      }
+    }
+  };
+  const ctx = await makeTestApp({}, { supabaseAuth });
+  t.after(() => ctx.close());
+
+  const first = await api(ctx.base, 'GET', '/api/me', { token: 'token-one' });
+  assert.equal(first.status, 200);
+  assert.equal(first.body.data.user.id, 'auth-user-one');
+  assert.equal(first.body.data.user.kind, 'registered');
+  assert.equal(first.body.data.profile.name, 'Candidate One');
+
+  const saved = await api(ctx.base, 'PUT', '/api/me/onboarding', {
+    token: 'token-one',
+    body: { name: 'Updated Candidate One', scores: {} }
+  });
+  assert.equal(saved.status, 200);
+
+  const second = await api(ctx.base, 'GET', '/api/me', { token: 'token-two' });
+  assert.equal(second.status, 200);
+  assert.equal(second.body.data.user.id, 'auth-user-two');
+  assert.equal(second.body.data.profile.name, 'Candidate Two');
+
+  const deletion = await api(ctx.base, 'DELETE', '/api/me', { token: 'token-one' });
+  assert.equal(deletion.status, 403);
+  assert.equal(deletion.body.error.code, 'ACCOUNT_DELETION_UNSUPPORTED');
+
+  const invalid = await api(ctx.base, 'GET', '/api/me', { token: 'expired-token' });
+  assert.equal(invalid.status, 401);
 });
 
 test('demo personas clone without touching templates', async t => {

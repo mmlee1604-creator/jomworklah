@@ -7,6 +7,7 @@ import { startCatalogue } from './services/course-catalogue.js';
 const config = loadConfig();
 
 let db;
+let supabaseAuth = null;
 try {
   db = await openPostgresDatabase(config.databaseUrl);
   const { count } = await db.prepare('SELECT COUNT(*) AS count FROM skills').get();
@@ -26,6 +27,7 @@ if (config.supabase.url && config.supabase.serviceRoleKey) {
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const client = createClient(config.supabase.url, config.supabase.serviceRoleKey, { auth: { persistSession: false } });
+    supabaseAuth = client;
     catalogue = await startCatalogue({ client, refreshMs: config.supabase.refreshMs });
   } catch (error) {
     console.error('Failed to load the course catalogue from Supabase:', error.message);
@@ -41,7 +43,7 @@ if (config.supabase.url && config.supabase.serviceRoleKey) {
   console.warn('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set: serving only the 10 illustrative sample courses.');
 }
 
-const app = createApp({ db, config, ai: createAiAdapter(config) });
+const app = createApp({ db, config, supabaseAuth, ai: createAiAdapter(config) });
 
 const server = app.listen(config.port, () => {
   console.log(`Jom Kerja Lah API listening on http://localhost:${config.port}`);
