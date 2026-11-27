@@ -14,9 +14,19 @@ const withAliases = (aliases, schema) => z.preprocess(input => {
 
 const profileAliases = { field: 'fieldOfStudy', hours: 'weeklyHours', mode: 'learningMode' };
 
+const mbtiField = z.enum([
+  'INTJ', 'INTP', 'ENTJ', 'ENTP', 'INFJ', 'INFP', 'ENFJ', 'ENFP',
+  'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ', 'ISTP', 'ISFP', 'ESTP', 'ESFP'
+]);
+const hollandField = z.array(z.enum(['R', 'I', 'A', 'S', 'E', 'C']))
+  .max(3)
+  .refine(codes => new Set(codes).size === codes.length, 'Holland codes must not repeat.');
+
 const profileFields = {
   name: z.string().trim().min(1).max(120).optional(),
   headline: z.string().max(200).optional(),
+  mbti: mbtiField.optional(),
+  holland: hollandField.optional(),
   qualification: z.string().max(120).optional(),
   fieldOfStudy: z.string().max(120).optional(),
   location: z.string().max(120).optional(),

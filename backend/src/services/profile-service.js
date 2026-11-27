@@ -12,6 +12,8 @@ import { profileView, roadmapSnapshotView } from '../api/serializers.js';
 const profileColumns = {
   name: 'name',
   headline: 'headline',
+  mbti: 'mbti',
+  holland: 'holland_codes_json',
   qualification: 'qualification',
   fieldOfStudy: 'field_of_study',
   location: 'location',
@@ -32,10 +34,11 @@ export async function updateProfile(db, userId, patch) {
   const entries = Object.entries(patch).filter(([key]) => key in profileColumns);
   if (entries.length) {
     const assignments = entries.map(([key]) => `${profileColumns[key]} = ?`);
+    const values = entries.map(([key, value]) => key === 'holland' ? JSON.stringify(value) : value);
     await db.prepare(`
       UPDATE profiles SET ${assignments.join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE user_id = ?
-    `).run(...entries.map(([, value]) => value), userId);
+    `).run(...values, userId);
   }
   return getProfileState(db, userId);
 }

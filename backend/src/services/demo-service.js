@@ -48,8 +48,8 @@ export async function createDemoSession(db, personaKey) {
     await tx.prepare("INSERT INTO users(id, kind, source_persona) VALUES(?, 'demo_clone', ?)").run(userId, personaKey);
 
     await tx.prepare(`
-      INSERT INTO profiles(user_id, name, headline, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode)
-      SELECT ?, name, headline, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode
+      INSERT INTO profiles(user_id, name, headline, mbti, holland_codes_json, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode)
+      SELECT ?, name, headline, mbti, holland_codes_json, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode
       FROM profiles WHERE user_id = ?
     `).run(userId, template.id);
 
@@ -87,8 +87,8 @@ export async function restoreSampleProfile(db, userId) {
   await transaction(db, async tx => {
     await tx.prepare(`
       UPDATE profiles SET
-        (name, headline, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode) =
-        (SELECT name, headline, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode
+        (name, headline, mbti, holland_codes_json, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode) =
+        (SELECT name, headline, mbti, holland_codes_json, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode
          FROM profiles WHERE user_id = ?),
         updated_at = CURRENT_TIMESTAMP
       WHERE user_id = ?

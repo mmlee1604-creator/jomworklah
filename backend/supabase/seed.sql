@@ -194,10 +194,10 @@ INSERT INTO users (id, kind, persona_key) VALUES
   ('tpl_amir', 'demo_template', 'amir')
 ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, persona_key = EXCLUDED.persona_key;
 
-INSERT INTO profiles (user_id, name, headline, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode) VALUES
-  ('tpl_aina', 'Aina Rahman', 'IT diploma graduate', 'Diploma', 'Information Technology', 'Selangor', 'Helped a campus society maintain monthly reports and supported a small office with part-time administrative work.', 'Built a campus attendance spreadsheet and report. Created a basic responsive site and practised Python in coursework.', 'RM0–RM500', 5, 'Online'),
-  ('tpl_amir', 'Amir Hakim', 'SPM leaver with workshop experience', 'SPM', 'General studies', 'Perak', 'Assisted at a family motorcycle workshop in Perak under supervision, organising tools and helping document service jobs.', 'Prepared a routine service checklist, logged recurring faults and observed basic electrical and sensor checks.', 'RM0–RM500', 8, 'In person')
-ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, headline = EXCLUDED.headline, qualification = EXCLUDED.qualification, field_of_study = EXCLUDED.field_of_study, location = EXCLUDED.location, experience = EXCLUDED.experience, projects = EXCLUDED.projects, budget = EXCLUDED.budget, weekly_hours = EXCLUDED.weekly_hours, learning_mode = EXCLUDED.learning_mode;
+INSERT INTO profiles (user_id, name, headline, mbti, holland_codes_json, qualification, field_of_study, location, experience, projects, budget, weekly_hours, learning_mode) VALUES
+  ('tpl_aina', 'Aina Rahman', 'IT diploma graduate', 'INFJ', '[]', 'Diploma', 'Information Technology', 'Selangor', 'Helped a campus society maintain monthly reports and supported a small office with part-time administrative work.', 'Built a campus attendance spreadsheet and report. Created a basic responsive site and practised Python in coursework.', 'RM0–RM500', 5, 'Online'),
+  ('tpl_amir', 'Amir Hakim', 'SPM leaver with workshop experience', 'ISTP', '[]', 'SPM', 'General studies', 'Perak', 'Assisted at a family motorcycle workshop in Perak under supervision, organising tools and helping document service jobs.', 'Prepared a routine service checklist, logged recurring faults and observed basic electrical and sensor checks.', 'RM0–RM500', 8, 'In person')
+ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, headline = EXCLUDED.headline, mbti = EXCLUDED.mbti, holland_codes_json = EXCLUDED.holland_codes_json, qualification = EXCLUDED.qualification, field_of_study = EXCLUDED.field_of_study, location = EXCLUDED.location, experience = EXCLUDED.experience, projects = EXCLUDED.projects, budget = EXCLUDED.budget, weekly_hours = EXCLUDED.weekly_hours, learning_mode = EXCLUDED.learning_mode;
 
 INSERT INTO journeys (user_id, started, target_job_id) VALUES
   ('tpl_aina', 1, 'junior-data-analyst'),

@@ -241,6 +241,19 @@ const migrations = [
       DROP TABLE user_courses;
       ALTER TABLE user_courses_new RENAME TO user_courses;
     `
+  },
+  {
+    version: 5,
+    name: 'profile-personality-preferences',
+    sql: `
+      ALTER TABLE profiles ADD COLUMN mbti TEXT CHECK (
+        mbti IS NULL OR mbti IN (
+          'INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP',
+          'ISTJ','ISFJ','ESTJ','ESFJ','ISTP','ISFP','ESTP','ESFP'
+        )
+      );
+      ALTER TABLE profiles ADD COLUMN holland_codes_json TEXT;
+    `
   }
 ];
 

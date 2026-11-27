@@ -68,6 +68,7 @@ const skills = [
 const personas = {
   aina: {
     name: 'Aina Rahman', initials: 'AR', headline: 'IT diploma graduate', photo: 'personas/aina.jpg',
+    mbti: 'INFJ', holland: [],
     qualification: 'Diploma', field: 'Information Technology', location: 'Selangor',
     experience: 'Helped a campus society maintain monthly reports and supported a small office with part-time administrative work.',
     projects: 'Built a campus attendance spreadsheet and report. Created a basic responsive site and practised Python in coursework.',
@@ -76,6 +77,7 @@ const personas = {
   },
   amir: {
     name: 'Amir Hakim', initials: 'AH', headline: 'SPM leaver with workshop experience', photo: 'personas/amir.jpg',
+    mbti: 'ISTP', holland: [],
     qualification: 'SPM', field: 'General studies', location: 'Perak',
     experience: 'Assisted at a family motorcycle workshop in Perak under supervision, organising tools and helping document service jobs.',
     projects: 'Prepared a routine service checklist, logged recurring faults and observed basic electrical and sensor checks.',

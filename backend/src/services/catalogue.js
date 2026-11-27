@@ -32,6 +32,10 @@ export function toProfile(row) {
   return {
     name: row.name,
     headline: row.headline,
+    mbti: row.mbti,
+    holland: row.holland_codes_json === null || row.holland_codes_json === undefined
+      ? null
+      : JSON.parse(row.holland_codes_json),
     qualification: row.qualification,
     fieldOfStudy: row.field_of_study,
     location: row.location,

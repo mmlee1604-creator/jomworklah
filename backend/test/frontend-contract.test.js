@@ -14,6 +14,8 @@ test('demo session returns the prototype profile and journey shape', async t => 
   assert.equal(profile.field, 'Information Technology');
   assert.equal(profile.hours, 5);
   assert.equal(profile.mode, 'Online');
+  assert.equal(profile.mbti, 'INFJ');
+  assert.deepEqual(profile.holland, []);
   assert.deepEqual(profile.interests, ['data', 'technology']);
   assert.equal(profile.scores.excel, 4);
   assert.equal(profile.scores.networking, 0);
@@ -41,7 +43,8 @@ test('onboarding saves the whole profile form and starts the journey', async t =
     body: {
       name: 'Amir H', qualification: 'Certificate', field: 'Automotive', experience: 'Workshop', projects: 'Checklist',
       location: 'Johor', budget: 'Flexible', mode: 'Hybrid', hours: 12,
-      interests: ['automotive'], scores: { tools: 5, sql: 2 }
+      interests: ['automotive'], scores: { tools: 5, sql: 2 },
+      mbti: 'ENTP', holland: ['I', 'R', 'C']
     }
   });
   assert.equal(saved.status, 200);
@@ -51,6 +54,8 @@ test('onboarding saves the whole profile form and starts the journey', async t =
   assert.deepEqual(journey.preferences, { location: 'Johor', budget: 'Flexible', mode: 'Hybrid', hours: 12, interests: ['automotive'] });
   assert.equal(profile.field, 'Automotive');
   assert.equal(profile.fieldOfStudy, 'Automotive');
+  assert.equal(profile.mbti, 'ENTP');
+  assert.deepEqual(profile.holland, ['I', 'R', 'C']);
   assert.equal(profile.scores.tools, 5);
   assert.equal(profile.scores.sql, 2);
 
@@ -71,12 +76,19 @@ test('profile patch accepts frontend aliases', async t => {
   const token = await demoToken(ctx.base, 'aina');
 
   const patched = await api(ctx.base, 'PATCH', '/api/me/profile', {
-    token, body: { field: 'Data Science', hours: 8, mode: 'In person' }
+    token, body: { field: 'Data Science', hours: 8, mode: 'In person', mbti: 'INTP', holland: ['S', 'A'] }
   });
   assert.equal(patched.status, 200);
   assert.equal(patched.body.data.fieldOfStudy, 'Data Science');
   assert.equal(patched.body.data.hours, 8);
   assert.equal(patched.body.data.learningMode, 'In person');
+  assert.equal(patched.body.data.mbti, 'INTP');
+  assert.deepEqual(patched.body.data.holland, ['S', 'A']);
+
+  const invalidHolland = await api(ctx.base, 'PATCH', '/api/me/profile', {
+    token, body: { holland: ['R', 'R'] }
+  });
+  assert.equal(invalidHolland.status, 400);
 });
 
 test('career list carries everything the cards and role modal render', async t => {
@@ -163,7 +175,10 @@ test('sample reset restores the persona profile but keeps the journey', async t 
   const token = await demoToken(ctx.base, 'aina', { target: 'junior-data-analyst' });
 
   await api(ctx.base, 'PUT', '/api/me/onboarding', {
-    token, body: { name: 'Edited', hours: 12, interests: ['creative'], scores: { excel: 0 } }
+    token, body: {
+      name: 'Edited', hours: 12, interests: ['creative'], scores: { excel: 0 },
+      mbti: 'ENTJ', holland: ['E', 'C']
+    }
   });
   await api(ctx.base, 'POST', '/api/me/roadmap', { token, body: { weeklyHours: 12 } });
 
@@ -172,6 +187,8 @@ test('sample reset restores the persona profile but keeps the journey', async t 
   const { profile, journey } = reset.body.data;
   assert.equal(profile.name, 'Aina Rahman');
   assert.equal(profile.hours, 5);
+  assert.equal(profile.mbti, 'INFJ');
+  assert.deepEqual(profile.holland, []);
   assert.deepEqual(profile.interests, ['data', 'technology']);
   assert.equal(profile.scores.excel, 4);
   assert.equal(journey.started, true);

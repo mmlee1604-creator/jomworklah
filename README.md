@@ -352,7 +352,9 @@ For a new Supabase project, run [`backend/supabase/schema.sql`](backend/supabase
 [`backend/supabase/seed.sql`](backend/supabase/seed.sql) in the SQL Editor. The first file creates the
 TVET catalogue tables; the latter two create and seed the application tables. `npm run db:migrate` and
 `npm run db:seed` apply the same SQL using `DATABASE_URL`. Existing course-catalogue tables/data are
-preserved when reapplying the idempotent schema.
+preserved when reapplying the idempotent schema. For an existing app database, reapply
+`app-schema.sql` to add new profile columns, then `seed.sql` to refresh demo templates. Existing
+browser-stored MBTI/Holland choices sync to Supabase when that persona is next loaded.
 
 The seed file is generated from the built-in demo/reference data:
 
@@ -672,10 +674,10 @@ The pitch is stronger when the numbers are trustworthy, so the boundaries are st
 - **The catalogue skews technical.** Almost no programme teaches Excel, Python, JavaScript or reporting, so data and business careers get weak course recommendations, while automotive, electrical and mechanical roles get many. About half of the programmes match none of the 18 skills (for example bricklaying or fashion) and appear only in search. Skill links come from keyword matching, so a few are wrong.
 - **Programmes are long.** Most last 1.5 to 3 years, not the weeks the original roadmap assumed, and the export has no delivery mode, so every programme is treated as on-campus.
 - **Compatibility weights (85/15) and requirement levels are illustrative**, chosen to be defensible rather than derived from a validated labour-market model.
-- **Holland Code is self-reported and browser-only.** The role codes are our own illustrative approximations, not an official O*NET lookup, and the 70/15/15 weighting is a design choice. The external O*NET test is English only and its result is entered by hand. The backend and employer site do not use it yet.
+- **Holland Code is self-reported.** Picks are saved with the Supabase profile, but role codes remain illustrative approximations rather than an official O*NET lookup, and the 70/15/15 weighting is a design choice. The external O*NET test is English only and its result is entered by hand.
 - **Skills Atlas mixes real and synthetic data.** State and district geometry comes from official DOSM/open data; supply, demand, gap, employer and institution figures are synthetic and labelled "Demo data".
 - **No job-board ingestion yet** — careers and their requirements are curated seed data. Only the TVET programmes come from a real export.
-- **The candidate app depends on the API for courses and saved progress, but not for everything.** Career matching, Holland Code and MBTI run in the browser only, resume upload is simulated, and the employer site is still mock data. If the API is down the Upskilling Hub shows an error.
+- **The candidate app depends on the API for profiles and saved progress, but not for everything.** Career matching still runs in the browser; MBTI and Holland selections are persisted to the profile in Supabase. Resume upload is simulated, and the employer site is still mock data. If the API is down the Upskilling Hub shows an error.
 - Privacy is minimal by design: no email, no passwords, no server-side resume retention after parsing.
 
 ### Data sources the product is built to use

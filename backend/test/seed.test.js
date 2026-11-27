@@ -52,13 +52,14 @@ test('demo templates target Aina and Amir roles', () => {
   try {
     seed(db);
     const rows = db.prepare(`
-      SELECT u.persona_key, j.target_job_id FROM users u
+      SELECT u.persona_key, j.target_job_id, p.mbti, p.holland_codes_json FROM users u
       JOIN journeys j ON j.user_id = u.id
+      JOIN profiles p ON p.user_id = u.id
       WHERE u.kind = 'demo_template' ORDER BY u.persona_key
     `).all();
-    assert.deepEqual(rows.map(row => [row.persona_key, row.target_job_id]), [
-      ['aina', 'junior-data-analyst'],
-      ['amir', 'automotive-technician']
+    assert.deepEqual(rows.map(row => [row.persona_key, row.target_job_id, row.mbti, row.holland_codes_json]), [
+      ['aina', 'junior-data-analyst', 'INFJ', '[]'],
+      ['amir', 'automotive-technician', 'ISTP', '[]']
     ]);
   } finally {
     closeDatabase(db);

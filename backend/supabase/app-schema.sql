@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS profiles (
   user_id         text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   name            text NOT NULL DEFAULT 'Guest',
   headline        text NOT NULL DEFAULT '',
+  mbti            text CHECK (mbti IS NULL OR mbti IN (
+                    'INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP',
+                    'ISTJ','ISFJ','ESTJ','ESFJ','ISTP','ISFP','ESTP','ESFP'
+                  )),
+  holland_codes_json text,
   qualification   text NOT NULL DEFAULT '',
   field_of_study  text NOT NULL DEFAULT '',
   location        text NOT NULL DEFAULT '',
@@ -40,6 +45,11 @@ CREATE TABLE IF NOT EXISTS profiles (
                   CHECK (learning_mode IN ('Online', 'In person', 'Hybrid')),
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS mbti text CHECK (mbti IS NULL OR mbti IN (
+  'INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP',
+  'ISTJ','ISFJ','ESTJ','ESFJ','ISTP','ISFP','ESTP','ESFP'
+));
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS holland_codes_json text;
 
 CREATE TABLE IF NOT EXISTS skills (
   id          text PRIMARY KEY,

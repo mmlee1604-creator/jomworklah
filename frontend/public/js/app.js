@@ -146,7 +146,9 @@ async function ensureSession(personaId) {
 function applyMe(personaId, me) {
   const server = me.profile;
   Object.assign(state.profiles[personaId], {
-    name: server.name, qualification: server.qualification, field: server.field ?? server.fieldOfStudy,
+    name: server.name, headline: server.headline, mbti: server.mbti ?? state.profiles[personaId].mbti,
+    holland: server.holland ?? state.profiles[personaId].holland ?? [],
+    qualification: server.qualification, field: server.field ?? server.fieldOfStudy,
     experience: server.experience, projects: server.projects, location: server.location,
     budget: server.budget, hours: server.hours ?? server.weeklyHours, mode: server.mode ?? server.learningMode,
     interests: me.interests, scores: { ...server.scores }
@@ -170,7 +172,24 @@ async function loadRoadmap(personaId) {
 
 async function hydratePersona(personaId) {
   const me = await ensureSession(personaId);
+  const legacyProfile = state.profiles[personaId];
+  const personalityMigration = {};
+  if (me.profile.mbti == null && legacyProfile.mbti) personalityMigration.mbti = legacyProfile.mbti;
+  if (me.profile.holland == null && Array.isArray(legacyProfile.holland)) {
+    personalityMigration.holland = legacyProfile.holland;
+  }
   applyMe(personaId, me);
+  if (Object.keys(personalityMigration).length) {
+    try {
+      const { data } = await call('patch', '/me/profile', personalityMigration, personaId);
+      Object.assign(state.profiles[personaId], {
+        mbti: data.mbti ?? personalityMigration.mbti,
+        holland: data.holland ?? personalityMigration.holland
+      });
+    } catch (error) {
+      notify('Could not migrate personality preferences to Supabase: ' + error.message);
+    }
+  }
   if (me.journey.roadmap) await loadRoadmap(personaId);
   hydrated[personaId] = true;
 }
@@ -250,7 +269,7 @@ function refreshCatalogueViews() {
 
 function persist() {
   try {
-    // Only browser-side choices live here. Profile, target, saved courses and roadmap are on the server.
+    // Keep a browser copy for migration/offline recovery; Supabase is the persisted profile source.
     const extras = Object.fromEntries(Object.entries(state.profiles).map(([id, p]) => [id, { mbti: p.mbti, holland: p.holland }]));
     localStorage.setItem(storageKey, JSON.stringify({ version: 2, persona: state.persona, extras }));
   } catch {
@@ -1090,7 +1109,7 @@ function settingsView() {
         <div class="settings-persona">${personaPhoto(state.persona, 72)}<div><strong>${escapeHTML(profile().name)}</strong><span>${type.code} · ${type.name}</span></div></div>
         <h2>Demo settings</h2>
         <dl><dt>Sample persona</dt><dd>${personas[state.persona].name}</dd><dt>MBTI personality</dt><dd>${type.code} · ${type.name} (${mbtiGroups[type.group].label})</dd><dt>Target career</dt><dd>${targetJob()?.title || 'Choose a career in Career Explorer'}</dd><dt>Selected resume</dt><dd>${state.file ? escapeHTML(state.file.name) + ' · This session only' : 'Using a sample profile'}</dd></dl>
-        ${notice('Your profile, target career, saved pathways and roadmap are saved on the server for this demo session. MBTI and Holland picks stay in this browser, and the chosen resume file is never stored.', 'lock')}
+        ${notice('Your profile, target career, saved pathways, roadmap, MBTI and Holland picks are saved on the server for this demo session. The chosen resume file is never stored.', 'lock')}
         ${goButton('How scores work', 'skills', 'plain', 'info')}
         ${goButton('Upload New Resume', 'upload', 'plain', 'upload')}
         ${button('Reset Demo', 'reset-demo', { style: 'secondary' })}
@@ -1305,7 +1324,8 @@ async function saveProfile(form) {
   try {
     const { data } = await call('put', '/me/onboarding', {
       ...info, location: preferences.location, budget: preferences.budget, mode: preferences.mode,
-      hours: preferences.hours, interests: preferences.interests, scores
+      hours: preferences.hours, interests: preferences.interests, scores,
+      mbti: preferences.mbti, holland: preferences.holland
     }, personaId);
     applyMe(personaId, data);
   } catch (error) {
